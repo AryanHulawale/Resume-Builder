@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import Editor from "./components/Editor";
 import Preview from "./components/Preview";
 import { computeATS, defaultResume, loadResume, saveResume } from "./lib/resume";
@@ -56,6 +57,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen text-slate-900">
+      <Analytics />
       {/* Header */}
       <header className="no-print sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3">
