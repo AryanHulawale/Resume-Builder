@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+html, body {
+  background: #f1f5f9;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-full {
+    position: static !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  #resume-preview-paper {
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    border-radius: 0 !important;
+  }
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}
+
+.resume-paper ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+/* slim scrollbars for editor */
+.slim-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.slim-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+}
