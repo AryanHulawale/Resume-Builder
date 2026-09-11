@@ -15,7 +15,12 @@ const ACCENTS = ["#2563eb", "#0d9488", "#7c3aed", "#db2777", "#ea580c", "#16a34a
 export default function App() {
   const [resume, setResume] = useState(() => loadResume());
   const [savedAt, setSavedAt] = useState(null);
+  const [importingPdf, setImportingPdf] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteBusy, setPasteBusy] = useState(false);
   const fileRef = useRef(null);
+  const pdfRef = useRef(null);
 
   useEffect(() => {
     saveResume(resume);
@@ -51,6 +56,73 @@ export default function App() {
     };
     reader.readAsText(f);
     e.target.value = "";
+  };
+
+  const applyParsedResume = (parsed) => {
+    setResume((r) => ({ ...structuredClone(defaultResume), ...parsed, settings: r.settings }));
+  };
+
+  const pdfErrorMessage = (err) => {
+    const raw = String(err?.message || err || "unknown error");
+    if (raw === "NO_TEXT" || raw.startsWith("NO_TEXT")) {
+      return "No selectable text found in this PDF. It may be a scanned/image PDF — try the \"Paste text\" option instead (open the PDF, Select All, Copy, then paste here).";
+    }
+    if (raw === "TOO_LARGE") return "PDF is too large (max 10MB).";
+    if (raw === "NOT_PDF") return "Please select a valid PDF file.";
+    if (raw === "PASSWORD_PROTECTED") return "This PDF is password-protected. Remove the password and try again, or use \"Paste text\".";
+    if (raw.startsWith("INVALID_PDF")) return "This PDF looks corrupted and could not be read. Try re-saving it as PDF, or use \"Paste text\".";
+    const detail = raw.replace(/^(READ_FAILED|PARSE_FAILED):\s*/, "");
+    return `Could not extract data from this PDF (${detail}). Try re-saving it as a text-based PDF, or use the "Paste text" option.`;
+  };
+
+  const handleImportPdf = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!confirm("Import PDF? This overwrites current fields with data extracted from the PDF.")) return;
+    setImportingPdf(true);
+    try {
+      const { hasUsefulData, parseResumePdf, summarizeParsed } = await import("./lib/parseResumePdf");
+      const parsed = await parseResumePdf(f);
+      if (!hasUsefulData(parsed)) {
+        alert("The PDF was read, but nothing recognizable (name, email, jobs, skills) was found. Your current data was kept. You can use \"Paste text\" to fill fields manually.");
+        return;
+      }
+      applyParsedResume(parsed);
+      alert(`Imported from PDF: ${summarizeParsed(parsed)}. Please review the fields and fix anything misplaced.`);
+    } catch (err) {
+      console.error(err);
+      alert(pdfErrorMessage(err));
+    } finally {
+      setImportingPdf(false);
+    }
+  };
+
+  const handlePasteImport = async () => {
+    if (!pasteText.trim()) {
+      alert("Paste your resume text first (open the PDF, Select All, Copy, then paste here).");
+      return;
+    }
+    if (!confirm("Fill the editor with the pasted text? This overwrites current fields.")) return;
+    setPasteBusy(true);
+    try {
+      // Pure text parser only — no PDF library involved.
+      const { hasUsefulData, parseResumeText, summarizeParsed } = await import("./lib/parseResumeText");
+      const parsed = parseResumeText(pasteText);
+      if (!hasUsefulData(parsed)) {
+        alert("Nothing recognizable (name, email, jobs, skills) was found in the pasted text. Your current data was kept.");
+        return;
+      }
+      applyParsedResume(parsed);
+      setPasteText("");
+      setPasteOpen(false);
+      alert(`Imported from pasted text: ${summarizeParsed(parsed)}. Please review the fields.`);
+    } catch (err) {
+      console.error(err);
+      alert("Could not parse the pasted text. Try pasting plain text with clear section headers (Experience, Education, Skills, ...).");
+    } finally {
+      setPasteBusy(false);
+    }
   };
 
   const scoreColor = ats.score >= 80 ? "bg-green-500" : ats.score >= 55 ? "bg-amber-500" : "bg-red-500";
@@ -107,12 +179,28 @@ export default function App() {
             <button onClick={handleExport} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Export JSON</button>
             <button onClick={() => fileRef.current?.click()} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Import</button>
             <button
+              onClick={() => pdfRef.current?.click()}
+              disabled={importingPdf}
+              className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+              title="Extract data from an existing resume PDF and autofill the editor"
+            >
+              {importingPdf ? "Reading PDF…" : "Import PDF"}
+            </button>
+            <button
+              onClick={() => setPasteOpen(true)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              title="Paste resume text (from any PDF) and autofill the editor — works even for scanned PDFs"
+            >
+              Paste text
+            </button>
+            <button
               onClick={() => { if (confirm("Reset to sample resume?")) setResume(structuredClone(defaultResume)); }}
               className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50"
             >
               Reset
             </button>
             <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={handleImport} />
+            <input ref={pdfRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={handleImportPdf} />
           </div>
         </div>
       </header>
@@ -161,6 +249,41 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Paste-text fallback modal (works even for scanned PDFs) */}
+      {pasteOpen && (
+        <div className="no-print fixed inset-0 z-30 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-sm font-extrabold">Paste resume text</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Open your PDF, press Ctrl+A / Cmd+A, Copy, then paste below. Section headers like
+              Experience, Education, Skills, Projects help the parser. Current data is only replaced after you confirm.
+            </p>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              rows={12}
+              placeholder={"Aarav Sharma\nFrontend Developer\naarav.sharma@email.com | +91 98765 43210\n...\nEXPERIENCE\n..."}
+              className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setPasteOpen(false)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasteImport}
+                disabled={pasteBusy}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {pasteBusy ? "Parsing…" : "Parse & Fill"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
