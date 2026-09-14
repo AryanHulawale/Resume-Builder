@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import Editor from "./components/Editor";
 import Preview from "./components/Preview";
+import ImportReviewModal from "./components/ImportReviewModal";
 import { computeATS, defaultResume, loadResume, saveResume } from "./lib/resume";
 
 const TEMPLATES = [
@@ -19,6 +20,11 @@ export default function App() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [pasteBusy, setPasteBusy] = useState(false);
+  const [atsOpen, setAtsOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewData, setReviewData] = useState(null);
+  const [reviewStep, setReviewStep] = useState(0);
+  const [reviewSource, setReviewSource] = useState("");
   const fileRef = useRef(null);
   const pdfRef = useRef(null);
 
@@ -79,7 +85,6 @@ export default function App() {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    if (!confirm("Import PDF? This overwrites current fields with data extracted from the PDF.")) return;
     setImportingPdf(true);
     try {
       const { hasUsefulData, parseResumePdf, summarizeParsed } = await import("./lib/parseResumePdf");
@@ -88,8 +93,11 @@ export default function App() {
         alert("The PDF was read, but nothing recognizable (name, email, jobs, skills) was found. Your current data was kept. You can use \"Paste text\" to fill fields manually.");
         return;
       }
-      applyParsedResume(parsed);
-      alert(`Imported from PDF: ${summarizeParsed(parsed)}. Please review the fields and fix anything misplaced.`);
+      // Open confirm wizard so user cross-checks every section before apply.
+      setReviewData(parsed);
+      setReviewStep(0);
+      setReviewSource(`Imported from PDF: ${summarizeParsed(parsed)}`);
+      setReviewOpen(true);
     } catch (err) {
       console.error(err);
       alert(pdfErrorMessage(err));
@@ -98,12 +106,19 @@ export default function App() {
     }
   };
 
+  const handleReviewSubmit = () => {
+    if (!reviewData) return;
+    applyParsedResume(reviewData);
+    setReviewOpen(false);
+    setReviewData(null);
+    setReviewStep(0);
+  };
+
   const handlePasteImport = async () => {
     if (!pasteText.trim()) {
       alert("Paste your resume text first (open the PDF, Select All, Copy, then paste here).");
       return;
     }
-    if (!confirm("Fill the editor with the pasted text? This overwrites current fields.")) return;
     setPasteBusy(true);
     try {
       // Pure text parser only — no PDF library involved.
@@ -113,10 +128,12 @@ export default function App() {
         alert("Nothing recognizable (name, email, jobs, skills) was found in the pasted text. Your current data was kept.");
         return;
       }
-      applyParsedResume(parsed);
       setPasteText("");
       setPasteOpen(false);
-      alert(`Imported from pasted text: ${summarizeParsed(parsed)}. Please review the fields.`);
+      setReviewData(parsed);
+      setReviewStep(0);
+      setReviewSource(`Imported from pasted text: ${summarizeParsed(parsed)}`);
+      setReviewOpen(true);
     } catch (err) {
       console.error(err);
       alert("Could not parse the pasted text. Try pasting plain text with clear section headers (Experience, Education, Skills, ...).");
@@ -136,7 +153,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-lg font-black text-white">R</div>
             <div>
-              <div className="text-sm font-extrabold leading-none">Resume Builder</div>
+              <div className="text-sm font-extrabold leading-none">Rumevo</div>
               <div className="text-[11px] text-slate-500">Autosaved {savedAt ? `· ${savedAt}` : ""} · localStorage</div>
             </div>
           </div>
@@ -206,34 +223,48 @@ export default function App() {
       </header>
 
       {/* Main */}
-      <main className="print-full mx-auto grid max-w-[1400px] grid-cols-1 gap-5 px-4 py-5 lg:grid-cols-[480px_1fr]">
+      <main className="print-full mx-auto grid max-w-[1500px] grid-cols-1 items-start gap-5 px-4 py-5 lg:grid-cols-[560px_1fr]">
         {/* Left: editor + ATS */}
         <div className="no-print space-y-4">
-          {/* ATS card */}
+          {/* ATS card — collapsed by default, dropdown reveals checks */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
+            <button
+              onClick={() => setAtsOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 text-left"
+              aria-expanded={atsOpen}
+            >
               <h3 className="text-sm font-extrabold">ATS Score — {ats.score}/100</h3>
-              <span className="text-[11px] font-semibold text-slate-500">{ats.passed}/{ats.total} checks</span>
-            </div>
+              <span className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-500">{ats.passed}/{ats.total} checks</span>
+                <span className={`flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-600 transition-transform ${atsOpen ? "rotate-180" : ""}`}>
+                  ▾
+                </span>
+              </span>
+            </button>
             <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
               <div className={`h-full rounded-full transition-all ${scoreColor}`} style={{ width: `${ats.score}%` }} />
             </div>
-            <ul className="mt-3 space-y-1.5">
-              {ats.checks.map((c) => (
-                <li key={c.id} className="flex items-start gap-2 text-xs">
-                  <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-black text-white ${c.pass ? "bg-green-500" : "bg-slate-300"}`}>
-                    {c.pass ? "✓" : "!"}
-                  </span>
-                  <span className={c.pass ? "text-slate-700" : "text-slate-500"}>
-                    <span className="font-semibold">{c.label}</span>
-                    {!c.pass && <span className="block text-slate-400">{c.tip}</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            {atsOpen && (
+              <ul className="mt-3 space-y-1.5">
+                {ats.checks.map((c) => (
+                  <li key={c.id} className="flex items-start gap-2 text-xs">
+                    <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-black text-white ${c.pass ? "bg-green-500" : "bg-slate-300"}`}>
+                      {c.pass ? "✓" : "!"}
+                    </span>
+                    <span className={c.pass ? "text-slate-700" : "text-slate-500"}>
+                      <span className="font-semibold">{c.label}</span>
+                      {!c.pass && <span className="block text-slate-400">{c.tip}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!atsOpen && (
+              <p className="mt-1.5 text-[11px] text-slate-400">Click ▾ to view detailed checks & suggestions</p>
+            )}
           </div>
 
-          <div className="slim-scroll lg:max-h-[calc(100vh-280px)] lg:overflow-y-auto lg:pr-1">
+          <div>
             <Editor resume={resume} setResume={setResume} />
           </div>
         </div>
@@ -278,11 +309,24 @@ export default function App() {
                 disabled={pasteBusy}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-60"
               >
-                {pasteBusy ? "Parsing…" : "Parse & Fill"}
+                {pasteBusy ? "Parsing…" : "Parse & Review →"}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Import review / confirm wizard */}
+      {reviewOpen && reviewData && (
+        <ImportReviewModal
+          data={reviewData}
+          setData={setReviewData}
+          step={reviewStep}
+          setStep={setReviewStep}
+          sourceLabel={reviewSource}
+          onClose={() => { setReviewOpen(false); setReviewData(null); setReviewStep(0); }}
+          onSubmit={handleReviewSubmit}
+        />
       )}
     </div>
   );
