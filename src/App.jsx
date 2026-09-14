@@ -224,8 +224,9 @@ export default function App() {
 
       {/* Main */}
       <main className="print-full mx-auto grid max-w-[1500px] grid-cols-1 items-start gap-5 px-4 py-5 lg:grid-cols-[560px_1fr]">
-        {/* Left: editor + ATS */}
-        <div className="no-print space-y-4">
+        {/* Left: editor + ATS — capped to viewport with its own scroll so the
+            page ends when the resume (right) ends */}
+        <div className="no-print space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2 lg:pr-1 slim-scroll">
           {/* ATS card — collapsed by default, dropdown reveals checks */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <button
