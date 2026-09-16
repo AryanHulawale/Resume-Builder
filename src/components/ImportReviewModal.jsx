@@ -1,4 +1,5 @@
-import { getFlatSkills, getSkillLines, normalizeSkillsToText } from "../lib/resume";
+import { getFlatSkills, getSkillLines, normalizeSkillsToText, parseBullets } from "../lib/resume";
+import { BulletList, RichArea } from "./Editor";
 
 function MiniField({ label, value, onChange, placeholder }) {
   return (
@@ -105,7 +106,7 @@ export default function ImportReviewModal({ data, setData, step, setStep, onClos
                 <MiniField label="GitHub" value={p.github} onChange={(v) => patchPersonal("github", v)} placeholder="github.com/..." />
                 <MiniField label="Website" value={p.website} onChange={(v) => patchPersonal("website", v)} placeholder="your-site.dev" />
               </div>
-              <MiniArea label="Professional summary" rows={4} value={p.summary} onChange={(v) => patchPersonal("summary", v)} placeholder="2–4 lines: years, stack, measurable wins..." />
+              <RichArea label="Professional summary" rows={4} value={p.summary} onChange={(v) => patchPersonal("summary", v)} placeholder="2–4 lines: years, stack, measurable wins..." />
             </div>
           )}
 
@@ -121,7 +122,8 @@ export default function ImportReviewModal({ data, setData, step, setStep, onClos
                     <MiniField label="Start" value={e.start} onChange={(v) => patchList("experience", e.id, { start: v })} />
                     <MiniField label="End" value={e.end} onChange={(v) => patchList("experience", e.id, { end: v })} />
                   </div>
-                  <MiniArea label="Bullets (one per line)" rows={3} value={e.bullets} onChange={(v) => patchList("experience", e.id, { bullets: v })} />
+                  <BulletList value={e.bullets} onChange={(v) => patchList("experience", e.id, { bullets: v })} />
+                  <p className="text-[11px] text-slate-400">{parseBullets(e.bullets).length} point(s) — one box = one • in preview.</p>
                 </div>
               ))}
             </div>
@@ -139,7 +141,7 @@ export default function ImportReviewModal({ data, setData, step, setStep, onClos
                     <MiniField label="Start" value={e.start} onChange={(v) => patchList("education", e.id, { start: v })} />
                     <MiniField label="End" value={e.end} onChange={(v) => patchList("education", e.id, { end: v })} />
                   </div>
-                  <MiniArea label="Details (Enter = new line)" rows={3} value={e.details} onChange={(v) => patchList("education", e.id, { details: v })} placeholder={"GPA: 9.75\nFocused on ..."} />
+                  <RichArea label="Details (Enter = new line)" rows={3} value={e.details} onChange={(v) => patchList("education", e.id, { details: v })} placeholder={"GPA: 9.75\nFocused on ..."} />
                 </div>
               ))}
             </div>
@@ -179,7 +181,7 @@ export default function ImportReviewModal({ data, setData, step, setStep, onClos
                     <MiniField label="Link" value={e.link} onChange={(v) => patchList("projects", e.id, { link: v })} />
                     <MiniField label="Tech stack" value={e.tech} onChange={(v) => patchList("projects", e.id, { tech: v })} />
                   </div>
-                  <MiniArea label="Description" rows={2} value={e.description} onChange={(v) => patchList("projects", e.id, { description: v })} />
+                  <RichArea label="Description" rows={2} value={e.description} onChange={(v) => patchList("projects", e.id, { description: v })} />
                 </div>
               ))}
             </div>

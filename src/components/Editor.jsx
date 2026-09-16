@@ -1,4 +1,6 @@
-import { getSkillLines, moveItem, normalizeSkillsToText, uid } from "../lib/resume";
+import { useRef } from "react";
+import { getSkillLines, moveItem, normalizeSkillsToText, smartJoinBullets, uid } from "../lib/resume";
+import { clearMarks, toggleMark, upperSelection } from "../lib/richtext";
 
 function Field({ label, ...props }) {
   return (
@@ -22,6 +24,258 @@ function Area({ label, ...props }) {
         className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       />
     </label>
+  );
+}
+
+const richBtn =
+  "rounded-md border border-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40";
+
+function RichButtons({ onBold, onItalic, onUnderline, onCaps, onClear }) {
+  return (
+    <div className="flex shrink-0 gap-1">
+      <button type="button" title="Bold (Ctrl+B)" onClick={onBold} className={`${richBtn} font-bold`}>B</button>
+      <button type="button" title="Italic (Ctrl+I)" onClick={onItalic} className={`${richBtn} italic`}>I</button>
+      <button type="button" title="Underline (Ctrl+U)" onClick={onUnderline} className={`${richBtn} underline`}>U</button>
+      <button type="button" title="UPPERCASE selected text" onClick={onCaps} className={richBtn}>AA</button>
+      <button type="button" title="Clear formatting from selection" onClick={onClear} className={richBtn}>✕</button>
+    </div>
+  );
+}
+
+function applyWithRef(ref, value, onChange, fn) {
+  const el = ref.current;
+  const v = String(value ?? "");
+  const s = el ? (el.selectionStart ?? v.length) : v.length;
+  const e = el ? (el.selectionEnd ?? v.length) : v.length;
+  const r = fn(v, s, e);
+  onChange(r.value);
+  requestAnimationFrame(() => {
+    if (!el) return;
+    el.focus();
+    try {
+      el.setSelectionRange(r.sel[0], r.sel[1]);
+    } catch { /* ignore */ }
+  });
+}
+
+function useRichShortcuts(handlers) {
+  return (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey)) return;
+    const k = String(ev.key || "").toLowerCase();
+    if (k === "b") {
+      ev.preventDefault();
+      handlers.bold();
+    } else if (k === "i") {
+      ev.preventDefault();
+      handlers.italic();
+    } else if (k === "u") {
+      ev.preventDefault();
+      handlers.underline();
+    }
+  };
+}
+
+// Word-style text area: toolbar on top (B I U CAPS Clear) + Ctrl+B/I/U shortcuts.
+// Stores **bold**, *italic*, __underline__ as plain text — preview renders them.
+export function RichArea({ label, value, onChange, rows = 3, placeholder }) {
+  const ref = useRef(null);
+  const apply = (fn) => applyWithRef(ref, value, onChange, fn);
+  const bold = () => apply((v, s, e) => toggleMark(v, s, e, "**"));
+  const italic = () => apply((v, s, e) => toggleMark(v, s, e, "*"));
+  const underline = () => apply((v, s, e) => toggleMark(v, s, e, "__"));
+  const caps = () => apply(upperSelection);
+  const clear = () => apply(clearMarks);
+  const onKeyDown = useRichShortcuts({ bold, italic, underline });
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{label}</span>
+        <RichButtons onBold={bold} onItalic={italic} onUnderline={underline} onCaps={caps} onClear={clear} />
+      </div>
+      <textarea
+        ref={ref}
+        rows={rows}
+        value={value ?? ""}
+        onChange={(ev) => onChange(ev.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+      />
+      <p className="mt-1 text-[11px] text-slate-400">Select text, then B / Ctrl+B for bold · Ctrl+I italic · Ctrl+U underline</p>
+    </div>
+  );
+}
+
+// One textbox per bullet point. Long text wraps automatically inside its box,
+// so Enter is ONLY for starting a new point — it can never split a sentence
+// mid-line by accident (the bug in the screenshot).
+export function BulletList({ value, onChange }) {
+  const items = String(value ?? "").split("\n");
+  if (items.length === 0) items.push("");
+  const refs = useRef([]);
+  const focusIdx = useRef(0);
+
+  const commit = (next, focusIdx = -1) => {
+    onChange(next.join("\n"));
+    if (focusIdx >= 0) {
+      requestAnimationFrame(() => {
+        const el = refs.current[focusIdx];
+        if (el) {
+          el.focus();
+          try {
+            const len = el.value.length;
+            el.setSelectionRange(len, len);
+          } catch { /* ignore */ }
+        }
+      });
+    }
+  };
+
+  const updateAt = (i, newVal) => {
+    if (newVal.includes("\n")) {
+      // Pasted multi-line text -> one bullet per line.
+      const parts = newVal.split("\n");
+      const next = [...items];
+      next.splice(i, 1, ...parts);
+      commit(next, i + parts.length - 1);
+    } else {
+      const next = [...items];
+      next[i] = newVal;
+      commit(next);
+    }
+  };
+
+  const splitAtCursor = (i, e) => {
+    e.preventDefault();
+    const el = e.currentTarget;
+    const pos = el.selectionStart ?? String(items[i] ?? "").length;
+    const cur = String(items[i] ?? "");
+    const before = cur.slice(0, pos).trimEnd();
+    const after = cur.slice(pos).trimStart();
+    const next = [...items];
+    next.splice(i, 1, before, after);
+    commit(next, i + 1);
+  };
+
+  const removeAt = (i) => {
+    if (items.length <= 1) {
+      commit([""]);
+      return;
+    }
+    commit(items.filter((_, idx) => idx !== i), Math.max(0, i - 1));
+  };
+
+  // Toolbar above the list acts on the last-focused box.
+  const boxApply = (fn) => {
+    const i = Math.min(focusIdx.current ?? 0, items.length - 1);
+    const el = refs.current[i];
+    const cur = String(items[i] ?? "");
+    const s = el ? (el.selectionStart ?? cur.length) : cur.length;
+    const e = el ? (el.selectionEnd ?? cur.length) : cur.length;
+    const r = fn(cur, s, e);
+    if (r.value.includes("\n")) return; // marks never add newlines; safety net
+    const next = [...items];
+    next[i] = r.value;
+    commit(next);
+    requestAnimationFrame(() => {
+      const n = refs.current[i];
+      if (!n) return;
+      n.focus();
+      try {
+        n.setSelectionRange(r.sel[0], r.sel[1]);
+      } catch { /* ignore */ }
+    });
+  };
+
+  const boxKeyDown = (i) => (ev) => {
+    if ((ev.ctrlKey || ev.metaKey)) {
+      const k = String(ev.key || "").toLowerCase();
+      const marks = { b: "**", i: "*", u: "__" };
+      if (marks[k]) {
+        ev.preventDefault();
+        const el = ev.currentTarget;
+        const cur = String(items[i] ?? "");
+        const r = toggleMark(cur, el.selectionStart ?? cur.length, el.selectionEnd ?? cur.length, marks[k]);
+        const next = [...items];
+        next[i] = r.value;
+        commit(next);
+        requestAnimationFrame(() => {
+          try {
+            el.focus();
+            el.setSelectionRange(r.sel[0], r.sel[1]);
+          } catch { /* ignore */ }
+        });
+        return;
+      }
+    }
+    if (ev.key === "Enter") splitAtCursor(i, ev);
+  };
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          Highlights — one point per box (Enter = new point)
+        </span>
+        <RichButtons
+          onBold={() => boxApply((v, s, e) => toggleMark(v, s, e, "**"))}
+          onItalic={() => boxApply((v, s, e) => toggleMark(v, s, e, "*"))}
+          onUnderline={() => boxApply((v, s, e) => toggleMark(v, s, e, "__"))}
+          onCaps={() => boxApply(upperSelection)}
+          onClear={() => boxApply(clearMarks)}
+        />
+      </div>
+      <div className="space-y-2">
+        {items.map((b, i) => (
+          <div key={i} className="flex items-start gap-1.5">
+            <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+            <textarea
+              ref={(el) => { refs.current[i] = el; }}
+              rows={Math.min(4, Math.max(2, Math.ceil((String(b).length || 1) / 90)))}
+              value={b}
+              onChange={(ev) => updateAt(i, ev.target.value)}
+              onFocus={() => { focusIdx.current = i; }}
+              onKeyDown={boxKeyDown(i)}
+              placeholder={i === 0 ? "Delivered 13 GIS-based tool components for BMC 3D Mumbai Project…" : "Next achievement…"}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+            <button
+              type="button"
+              onClick={() => removeAt(i)}
+              title="Remove this point"
+              className="mt-1.5 shrink-0 rounded-md border border-slate-200 px-1.5 py-1 text-xs text-slate-400 hover:bg-red-50 hover:text-red-600"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          Let long sentences wrap on their own — press <b>Enter</b> only for a new point.
+        </p>
+        <div className="flex shrink-0 gap-1.5">
+          {items.length > 1 && (
+            <button
+              type="button"
+              title="Merge lines that are just word-wraps of the same point (e.g. pasted text split mid-sentence)"
+              onClick={() => {
+                const joined = smartJoinBullets(items);
+                if (joined.length < items.filter((s) => String(s).trim()).length) {
+                  commit(joined, 0);
+                }
+              }}
+              className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              ✨ Join wrapped lines
+            </button>
+          )}
+          <button type="button" onClick={() => commit([...items, ""], items.length)} className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+            + Add point
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -81,7 +335,7 @@ export default function Editor({ resume, setResume }) {
           <Field label="GitHub" value={p.github} onChange={(e) => patchPersonal("github", e.target.value)} placeholder="github.com/..." />
           <Field label="Website / Portfolio" value={p.website} onChange={(e) => patchPersonal("website", e.target.value)} placeholder="your-site.dev" />
         </div>
-        <Area label="Professional summary" rows={4} value={p.summary} onChange={(e) => patchPersonal("summary", e.target.value)} placeholder="2–4 lines: years, stack, measurable wins..." />
+        <RichArea label="Professional summary" rows={4} value={p.summary} onChange={(v) => patchPersonal("summary", v)} placeholder="2–4 lines: years, stack, measurable wins... Select text + Ctrl+B for bold." />
       </Section>
 
       <Section
@@ -122,7 +376,7 @@ export default function Editor({ resume, setResume }) {
               <input type="checkbox" checked={e.current} onChange={(ev) => updateList("experience", e.id, { current: ev.target.checked })} />
               Currently working here
             </label>
-            <Area label="Bullets (one per line)" rows={4} value={e.bullets} onChange={(ev) => updateList("experience", e.id, { bullets: ev.target.value })} placeholder={"Built X, improving Y by 30%\nLed ..."} />
+            <BulletList value={e.bullets} onChange={(v) => updateList("experience", e.id, { bullets: v })} />
           </div>
         ))}
         {resume.experience.length === 0 && <p className="text-xs text-slate-400">No experience yet. Click + Add.</p>}
@@ -149,7 +403,7 @@ export default function Editor({ resume, setResume }) {
               <Field label="Start" value={e.start} onChange={(ev) => updateList("education", e.id, { start: ev.target.value })} />
               <Field label="End" value={e.end} onChange={(ev) => updateList("education", e.id, { end: ev.target.value })} />
             </div>
-            <Area label="Details (Enter = new line)" rows={3} value={e.details} onChange={(ev) => updateList("education", e.id, { details: ev.target.value })} placeholder={"GPA: 9.75 (96.14%) | Rank #2\nFocused on Full Stack Development (MERN)"} />
+            <RichArea label="Details (Enter = new line)" rows={3} value={e.details} onChange={(v) => updateList("education", e.id, { details: v })} placeholder={"GPA: 9.75 (96.14%) | Rank #2\nFocused on Full Stack Development (MERN)"} />
           </div>
         ))}
       </Section>
@@ -206,7 +460,7 @@ export default function Editor({ resume, setResume }) {
               <Field label="Link" value={e.link} onChange={(ev) => updateList("projects", e.id, { link: ev.target.value })} />
               <Field label="Tech stack" value={e.tech} onChange={(ev) => updateList("projects", e.id, { tech: ev.target.value })} />
             </div>
-            <Area label="Description (Enter = new line)" rows={3} value={e.description} onChange={(ev) => updateList("projects", e.id, { description: ev.target.value })} placeholder={"Built X, improving Y by 30%\nReal-time messaging with ..."} />
+            <RichArea label="Description (Enter = new line)" rows={3} value={e.description} onChange={(v) => updateList("projects", e.id, { description: v })} placeholder={"Built X, improving Y by 30%\nReal-time messaging with ..."} />
           </div>
         ))}
       </Section>
@@ -248,7 +502,7 @@ export default function Editor({ resume, setResume }) {
               </div>
             </div>
             <Field label="Section title" value={e.title} onChange={(ev) => updateList("customSections", e.id, { title: ev.target.value })} />
-            <Area label="Content" rows={3} value={e.content} onChange={(ev) => updateList("customSections", e.id, { content: ev.target.value })} />
+            <RichArea label="Content" rows={3} value={e.content} onChange={(v) => updateList("customSections", e.id, { content: v })} />
           </div>
         ))}
         {resume.customSections.length === 0 && <p className="text-xs text-slate-400">Add Languages, Hobbies, Awards, etc.</p>}

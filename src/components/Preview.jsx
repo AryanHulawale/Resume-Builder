@@ -1,28 +1,156 @@
-import { getFlatSkills, getSkillLines } from "../lib/resume";
+import { getFlatSkills, getSkillLines, parseBullets } from "../lib/resume";
+import { parseRich } from "../lib/richtext";
+
+// ---------- clickable links ----------
+// Display text stays exactly as typed; href is normalized so
+// "linkedin.com/in/x" becomes "https://linkedin.com/in/x".
+function hrefForUrl(u) {
+  const t = String(u || "").trim();
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(t)) return t;
+  return `https://${t}`;
+}
+
+function splitTrailingPunct(u) {
+  const m = String(u).match(/^(.*?)[.,;:!?)\]}'"]+$/);
+  if (m && m[1].length > 8) return { url: m[1], tail: String(u).slice(m[1].length) };
+  return { url: String(u), tail: "" };
+}
+
+// Plain text with http(s)/www URLs rendered as clickable links.
+function AutoLinks({ text, linkClassName }) {
+  const parts = String(text ?? "").split(/((?:https?:\/\/|www\.)[^\s]+)/g);
+  if (parts.length <= 1) return <>{text}</>;
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (i % 2 === 0 || !part) return <span key={i}>{part}</span>;
+        const { url, tail } = splitTrailingPunct(part);
+        return (
+          <span key={i}>
+            <a
+              href={hrefForUrl(url)}
+              target="_blank"
+              rel="noreferrer"
+              className={linkClassName || "underline decoration-slate-300 underline-offset-2 hover:text-blue-700"}
+            >
+              {url}
+            </a>
+            {tail}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+// Renders **bold**, *italic*, __underline__ stored by the editor toolbars.
+// Plain text (no markers) renders exactly as before.
+function RichText({ text }) {
+  const segs = parseRich(text);
+  return (
+    <>
+      {segs.map((s, i) =>
+        s.b ? (
+          <strong key={i} className="font-bold">{s.t}</strong>
+        ) : s.i ? (
+          <em key={i}>{s.t}</em>
+        ) : s.u ? (
+          <u key={i}>{s.t}</u>
+        ) : (
+          <span key={i}><AutoLinks text={s.t} /></span>
+        )
+      )}
+    </>
+  );
+}
 
 function Bullets({ text }) {
-  const items = (text || "").split("\n").map((s) => s.trim()).filter(Boolean);
+  const items = parseBullets(text);
   if (!items.length) return null;
   return (
     <ul className="mt-1 space-y-1 text-[13px] leading-relaxed text-slate-700">
       {items.map((b, i) => (
         <li key={i} className="flex gap-2">
           <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-40" />
-          <span>{b}</span>
+          <span><RichText text={b} /></span>
         </li>
       ))}
     </ul>
   );
 }
 
-function ContactLine({ p }) {
-  const parts = [p.email, p.phone, p.location].filter(Boolean);
-  const links = [p.linkedin, p.github, p.website].filter(Boolean);
+function dotJoin(nodes) {
+  const out = [];
+  nodes.forEach((n, i) => {
+    if (i > 0) out.push(<span key={`dot-${i}`}>{"  •  "}</span>);
+    out.push(n);
+  });
+  return out;
+}
+
+function ContactLine({ p, light }) {
+  const aCls = light
+    ? "underline decoration-white/50 underline-offset-2 hover:opacity-80"
+    : "underline decoration-slate-300 underline-offset-2 hover:text-blue-700";
+  const row1 = [];
+  if (p.email) {
+    row1.push(
+      <a key="email" href={`mailto:${String(p.email).trim()}`} className={aCls}>
+        {p.email}
+      </a>
+    );
+  }
+  if (p.phone) {
+    row1.push(
+      <a key="phone" href={`tel:${String(p.phone).replace(/[^\d+]/g, "")}`} className={aCls}>
+        {p.phone}
+      </a>
+    );
+  }
+  if (p.location) row1.push(<span key="loc">{p.location}</span>);
+  const row2 = [];
+  if (p.linkedin) {
+    row2.push(
+      <a key="li" href={hrefForUrl(p.linkedin)} target="_blank" rel="noreferrer" className={aCls}>
+        {p.linkedin}
+      </a>
+    );
+  }
+  if (p.github) {
+    row2.push(
+      <a key="gh" href={hrefForUrl(p.github)} target="_blank" rel="noreferrer" className={aCls}>
+        {p.github}
+      </a>
+    );
+  }
+  if (p.website) {
+    row2.push(
+      <a key="web" href={hrefForUrl(p.website)} target="_blank" rel="noreferrer" className={aCls}>
+        {p.website}
+      </a>
+    );
+  }
+  if (!row1.length && !row2.length) return null;
   return (
-    <div className="text-[12.5px] text-slate-600">
-      <div>{parts.join("  •  ")}</div>
-      {links.length > 0 && <div className="mt-0.5 break-words">{links.join("  •  ")}</div>}
+    <div className={light ? "text-[12.5px] text-white" : "text-[12.5px] text-slate-600"}>
+      {row1.length > 0 && <div>{dotJoin(row1)}</div>}
+      {row2.length > 0 && <div className="mt-0.5 break-words">{dotJoin(row2)}</div>}
     </div>
+  );
+}
+
+function ProjLink({ url }) {
+  const clean = String(url || "").trim();
+  if (!clean) return null;
+  return (
+    <a
+      href={hrefForUrl(clean)}
+      target="_blank"
+      rel="noreferrer"
+      className="underline decoration-slate-300 underline-offset-2 hover:text-blue-700 break-all"
+    >
+      {clean}
+    </a>
   );
 }
 
@@ -54,18 +182,15 @@ function Modern({ r }) {
       <div className="rounded-t-lg p-7 text-white" style={{ background: accent }}>
         <h1 className="text-3xl font-extrabold tracking-tight">{p.fullName || "Your Name"}</h1>
         <p className="mt-1 text-sm font-medium opacity-90">{p.title}</p>
-        <div className="mt-3 text-[12.5px] opacity-90">
-          {[p.email, p.phone, p.location].filter(Boolean).join("  •  ")}
-        </div>
-        <div className="mt-1 text-[12.5px] opacity-90 break-words">
-          {[p.linkedin, p.github, p.website].filter(Boolean).join("  •  ")}
+        <div className="mt-3 opacity-90">
+          <ContactLine p={p} light />
         </div>
       </div>
       <div className="space-y-5 p-7">
         {p.summary && (
           <section>
             <h2 className="mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Summary</h2>
-            <p className="text-[13px] leading-relaxed whitespace-pre-line text-slate-700">{p.summary}</p>
+            <p className="text-[13px] leading-relaxed whitespace-pre-line text-slate-700"><RichText text={p.summary} /></p>
           </section>
         )}
         {r.experience.length > 0 && (
@@ -91,8 +216,8 @@ function Modern({ r }) {
             {r.projects.map((pr) => (
               <div key={pr.id} className="mb-2">
                 <div className="text-[13.5px] font-bold text-slate-900">{pr.name} {pr.tech && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{pr.tech}</span>}</div>
-                {pr.link && <div className="text-[11.5px] text-slate-500">{pr.link}</div>}
-                {pr.description && <p className="text-[13px] whitespace-pre-line text-slate-700">{pr.description}</p>}
+                {pr.link && <div className="text-[11.5px] text-slate-500"><ProjLink url={pr.link} /></div>}
+                {pr.description && <p className="text-[13px] whitespace-pre-line text-slate-700"><RichText text={pr.description} /></p>}
               </div>
             ))}
           </section>
@@ -106,7 +231,7 @@ function Modern({ r }) {
                   <div className="text-[13px] font-bold text-slate-900">{e.degree}</div>
                   <div className="text-[12.5px] text-slate-600">{e.school}</div>
                   <div className="text-[11.5px] text-slate-500">{e.start} – {e.end}</div>
-                  {e.details && <p className="text-[12.5px] whitespace-pre-line text-slate-600">{e.details}</p>}
+                  {e.details && <p className="text-[12.5px] whitespace-pre-line text-slate-600"><RichText text={e.details} /></p>}
                 </div>
               ))}
             </section>
@@ -135,7 +260,7 @@ function Modern({ r }) {
         {r.customSections.map((s) => (
           <section key={s.id}>
             <h2 className="mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>{s.title}</h2>
-            <p className="text-[13px] whitespace-pre-wrap text-slate-700">{s.content}</p>
+            <p className="text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
           </section>
         ))}
       </div>
@@ -156,7 +281,7 @@ function Classic({ r }) {
         {p.summary && (
           <section>
             <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Professional Summary</h2>
-            <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line text-slate-700">{p.summary}</p>
+            <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line text-slate-700"><RichText text={p.summary} /></p>
           </section>
         )}
         {r.experience.length > 0 && (
@@ -175,7 +300,7 @@ function Classic({ r }) {
           <section>
             <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Education</h2>
             {r.education.map((e) => (
-              <div key={e.id} className="mt-1 text-[13px]"><span className="font-bold text-slate-900">{e.degree}</span><span className="text-slate-600"> — {e.school} ({e.start}–{e.end})</span>{e.details && <div className="whitespace-pre-line text-slate-600">{e.details}</div>}</div>
+              <div key={e.id} className="mt-1 text-[13px]"><span className="font-bold text-slate-900">{e.degree}</span><span className="text-slate-600"> — {e.school} ({e.start}–{e.end})</span>{e.details && <div className="whitespace-pre-line text-slate-600"><RichText text={e.details} /></div>}</div>
             ))}
           </section>
         )}
@@ -193,7 +318,7 @@ function Classic({ r }) {
           <section>
             <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Projects</h2>
             {r.projects.map((pr) => (
-              <div key={pr.id} className="mt-1 text-[13px]"><span className="font-bold">{pr.name}</span>{pr.tech && <span className="text-slate-500"> ({pr.tech})</span>}{pr.link && <div className="text-slate-500">{pr.link}</div>}{pr.description && <div className="whitespace-pre-line text-slate-700">{pr.description}</div>}</div>
+              <div key={pr.id} className="mt-1 text-[13px]"><span className="font-bold">{pr.name}</span>{pr.tech && <span className="text-slate-500"> ({pr.tech})</span>}{pr.link && <div className="text-slate-500"><ProjLink url={pr.link} /></div>}{pr.description && <div className="whitespace-pre-line text-slate-700"><RichText text={pr.description} /></div>}</div>
             ))}
           </section>
         )}
@@ -208,7 +333,7 @@ function Classic({ r }) {
         {r.customSections.map((s) => (
           <section key={s.id}>
             <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">{s.title}</h2>
-            <p className="mt-1 text-[13px] whitespace-pre-wrap text-slate-700">{s.content}</p>
+            <p className="mt-1 text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
           </section>
         ))}
       </div>
@@ -224,7 +349,7 @@ function Minimal({ r }) {
       <h1 className="text-3xl font-light tracking-tight text-slate-900">{p.fullName || "Your Name"}</h1>
       {p.title && <p className="mt-0.5 text-sm font-medium" style={{ color: accent }}>{p.title}</p>}
       <div className="mt-2"><ContactLine p={p} /></div>
-      {p.summary && <p className="mt-4 border-l-2 pl-3 text-[13px] leading-relaxed whitespace-pre-line text-slate-600 italic" style={{ borderColor: accent }}>{p.summary}</p>}
+      {p.summary && <p className="mt-4 border-l-2 pl-3 text-[13px] leading-relaxed whitespace-pre-line text-slate-600 italic" style={{ borderColor: accent }}><RichText text={p.summary} /></p>}
       <div className="mt-5 space-y-4">
         {r.experience.length > 0 && (
           <section>
@@ -253,7 +378,7 @@ function Minimal({ r }) {
             <section>
               <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Education</h2>
               {r.education.map((e) => (
-                <div key={e.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{e.school}</span> — {e.degree} ({e.start}–{e.end}){e.details && <div className="whitespace-pre-line text-slate-600">{e.details}</div>}</div>
+                <div key={e.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{e.school}</span> — {e.degree} ({e.start}–{e.end}){e.details && <div className="whitespace-pre-line text-slate-600"><RichText text={e.details} /></div>}</div>
               ))}
             </section>
           )}
@@ -261,7 +386,7 @@ function Minimal({ r }) {
             <section>
               <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Projects</h2>
               {r.projects.map((pr) => (
-                <div key={pr.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{pr.name}</span>{pr.tech && ` · ${pr.tech}`}{pr.description && <div className="whitespace-pre-line">{pr.description}</div>}</div>
+                <div key={pr.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{pr.name}</span>{pr.tech && ` · ${pr.tech}`}{pr.link && <div className="break-words"><ProjLink url={pr.link} /></div>}{pr.description && <div className="whitespace-pre-line"><RichText text={pr.description} /></div>}</div>
               ))}
             </section>
           )}
@@ -276,7 +401,7 @@ function Minimal({ r }) {
           {r.customSections.map((s) => (
             <section key={s.id}>
               <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">{s.title}</h2>
-              <p className="mt-1 text-[13px] whitespace-pre-wrap text-slate-700">{s.content}</p>
+              <p className="mt-1 text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
             </section>
           ))}
         </div>

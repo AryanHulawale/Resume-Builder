@@ -1,8 +1,9 @@
+import { stripFormatting } from "./richtext";
+
 export const uid = () =>
   Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 
 export const STORAGE_KEY = "resume-builder-v1";
-
 export const defaultResume = {
   personal: {
     fullName: "Aarav Sharma",
@@ -127,7 +128,7 @@ export function computeATS(resume) {
     tip: "Add missing name, email, phone, or location.",
   });
 
-  const summaryLen = (p.summary || "").trim().split(/\s+/).filter(Boolean).length;
+  const summaryLen = stripFormatting(p.summary || "").trim().split(/\s+/).filter(Boolean).length;
   checks.push({
     id: "summary",
     label: `Professional summary (${summaryLen} words, aim 30–80)`,
@@ -144,7 +145,7 @@ export function computeATS(resume) {
   });
 
   const allBullets = (resume.experience || [])
-    .flatMap((e) => (e.bullets || "").split("\n").map((b) => b.trim()).filter(Boolean));
+    .flatMap((e) => parseBullets(e.bullets).map(stripFormatting));
   const withNumbers = allBullets.filter((b) => /\d/.test(b)).length;
   checks.push({
     id: "metrics",
@@ -273,4 +274,67 @@ export function migrateResume(data) {
   next.skills = normalizeSkillsToText(data.skills);
   if (!next.settings) next.settings = { ...defaultResume.settings };
   return next;
+}
+
+// ---- Experience bullets: one non-empty line = one bullet point ----
+// Stored as a "\n"-joined string (backwards compatible). The editor shows
+// one box per bullet so long sentences wrap automatically — press Enter
+// only for a new point, never mid-sentence.
+export function stripBulletMarker(s) {
+  return String(s || "")
+    .replace(/^[•·▪○●◦‣⁃>›\-–—*+]+\s+/, "")
+    .replace(/^\d{1,2}\s*[.\)\:\-–—]\s+/, "")
+    .trim();
+}
+
+export function parseBullets(text) {
+  if (text == null) return [];
+  const raw = Array.isArray(text) ? text.join("\n") : String(text);
+  return raw
+    .split("\n")
+    .map((s) => (s || "").trim())
+    .filter(Boolean)
+    .map(stripBulletMarker)
+    .filter(Boolean);
+}
+
+// Words that start a NEW accomplishment. Used only to re-join visual
+// line-wraps (PDF imports + the editor's "Join wrapped lines" fix) —
+// never in preview, where one line is always one •.
+const BULLET_START_RE =
+  /^(achieved|acted|analyzed|architected|assisted|automated|built|collaborated|contributed|coordinated|created|decreased|delivered|designed|developed|drove|enabled|engineered|engaged|established|executed|facilitated|fixed|founded|handled|headed|improved|implemented|increased|integrated|introduced|launched|led|maintained|managed|mentored|migrated|negotiated|optimized|orchestrated|owned|partnered|performed|piloted|presented|prototyped|published|reduced|refactored|resolved|revamped|shipped|simplified|spearheaded|streamlined|strengthened|supervised|supported|tested|transformed|upgraded|worked|wrote)\b/i;
+
+function isMarkedBulletLine(raw) {
+  return /^[•·▪○●◦‣⁃>›\-–—*+]+\s+/.test(raw.trim()) || /^\d{1,2}\s*[.\)\:\-–—]\s+/.test(raw.trim());
+}
+
+// Join wrapped fragments back into full points:
+// ["Delivered 13 GIS tools, including Reservation", "Status Mapping, and Fire",
+//  "Incident Response tool briefly led delivery in absence."]
+// -> ["Delivered 13 GIS tools, including Reservation Status Mapping, and Fire Incident Response tool briefly led delivery in absence."]
+export function smartJoinBullets(rawLines) {
+  const lines = Array.isArray(rawLines)
+    ? rawLines
+    : String(rawLines ?? "").split("\n");
+  const out = [];
+  for (const raw of lines) {
+    const t = (raw ?? "").trim();
+    if (!t) continue;
+    const marked = isMarkedBulletLine(raw);
+    const clean = stripBulletMarker(t);
+    if (!clean) continue;
+    if (marked || out.length === 0) {
+      out.push(clean);
+      continue;
+    }
+    const prev = out[out.length - 1];
+    if (/[.!?…]["'”’)\]]?\s*$/.test(prev)) {
+      out.push(clean); // previous point is a complete sentence
+    } else if (BULLET_START_RE.test(clean)) {
+      out.push(clean); // reads like a new accomplishment
+    } else {
+      out[out.length - 1] = `${prev} ${clean}`.replace(/\s{2,}/g, " ");
+    }
+  }
+  return out;
 }

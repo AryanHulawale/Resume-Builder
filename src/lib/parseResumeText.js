@@ -1,4 +1,4 @@
-import { defaultResume, uid } from "./resume";
+import { defaultResume, smartJoinBullets, uid } from "./resume";
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_RE = /(\+?\d[\d\s\-().]{6,}\d)/;
@@ -248,10 +248,13 @@ function parseExperience(lines) {
       }
     }
 
-    const bullets = bulletLines
-      .map((l) => stripBullet(l))
-      .filter((l) => l && !DATE_RANGE_RE.test(l))
-      .join("\n");
+    // Rebuild bullets: visual line-wraps from the PDF (one accomplishment split
+    // across several lines) are joined back via smartJoinBullets; each
+    // remaining item becomes one • in preview. The import review step shows
+    // one box per bullet so you can still adjust them before applying.
+    const bullets = smartJoinBullets(
+      bulletLines.filter((l) => (l || "").trim() && !DATE_RANGE_RE.test(l))
+    ).join("\n");
 
     return {
       id: uid(),
