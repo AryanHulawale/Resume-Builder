@@ -55,7 +55,10 @@ export const defaultResume = {
       details: "CGPA: 8.6/10. Relevant coursework: DSA, DBMS, Web Tech.",
     },
   ],
-  skills: ["React", "JavaScript", "TypeScript", "Tailwind CSS", "Node.js", "Git", "REST APIs", "Vite"],
+  skills: [
+    "Frontend Technologies: React, JavaScript, TypeScript, Tailwind CSS",
+    "Backend & Tools: Node.js, Git, REST APIs, Vite",
+  ].join("\n"),
   projects: [
     {
       id: "proj1",
@@ -92,7 +95,7 @@ export function loadResume() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return structuredClone(defaultResume);
     const parsed = JSON.parse(raw);
-    return { ...structuredClone(defaultResume), ...parsed };
+    return migrateResume({ ...structuredClone(defaultResume), ...parsed });
   } catch {
     return structuredClone(defaultResume);
   }
@@ -115,6 +118,7 @@ const ACTION_VERBS = [
 export function computeATS(resume) {
   const checks = [];
   const p = resume.personal || {};
+  const flatSkills = getFlatSkills(resume.skills);
 
   checks.push({
     id: "contact",
@@ -161,8 +165,8 @@ export function computeATS(resume) {
 
   checks.push({
     id: "skills",
-    label: `Skills listed (${resume.skills?.length || 0}, aim 6+)`,
-    pass: (resume.skills?.length || 0) >= 6,
+    label: `Skills listed (${flatSkills.length}, aim 6+)`,
+    pass: flatSkills.length >= 6,
     tip: "Add 6–12 relevant hard skills / tools.",
   });
 
@@ -199,5 +203,74 @@ export function moveItem(arr, index, dir) {
   const j = index + dir;
   if (j < 0 || j >= next.length) return next;
   [next[index], next[j]] = [next[j], next[index]];
+  return next;
+}
+
+// ---- Skills helpers: section-wise (newline = new section, comma = separator) ----
+// Canonical `resume.skills` is now a multiline string, e.g.
+//   "Frontend Technologies: React, HTML5, CSS3\nBackend: Node.js, Express"
+// Old saved resumes may still have `skills` as a flat string[] — helpers accept both.
+
+export function getSkillLines(skills) {
+  if (skills == null) return [];
+  const raw = Array.isArray(skills) ? skills.join("\n") : String(skills);
+  return raw
+    .split("\n")
+    .map((s) => (s || "").trim())
+    .filter(Boolean);
+}
+
+export function getFlatSkills(skills) {
+  const lines = getSkillLines(skills);
+  const out = [];
+  const seen = new Set();
+  for (const line of lines) {
+    // Strip "Category:" prefix so Modern pills stay comma-separated individual skills.
+    let itemsPart = line;
+    const colonIdx = line.indexOf(":");
+    if (colonIdx !== -1) {
+      const after = line.slice(colonIdx + 1).trim();
+      if (after) itemsPart = after;
+    }
+    const parts = itemsPart.split(/[,•·|;]+/).map((s) => s.trim()).filter(Boolean);
+    for (const part of parts) {
+      const clean = part.replace(/^[•*–—\s-]+/, "").trim();
+      if (!clean || clean.length > 60) continue;
+      const key = clean.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(clean);
+    }
+  }
+  return out;
+}
+
+export function normalizeSkillsToText(skills) {
+  if (typeof skills === "string") return skills;
+  if (Array.isArray(skills)) {
+    const flatRaw = skills.map((s) => String(s || "").trim()).filter(Boolean);
+    if (!flatRaw.length) return "";
+    // Preserve any newlines the user typed before (they were stored inside items).
+    const withBreaks = flatRaw.join("\n");
+    if (withBreaks.includes("\n")) {
+      // Re-join: lines that look like "Label: ..." stay on their own line,
+      // loose comma fragments get merged back with ", ".
+      const lines = withBreaks.split("\n").map((s) => s.trim()).filter(Boolean);
+      if (lines.some((l) => l.includes(":"))) return lines.join("\n");
+      return lines.join(", ");
+    }
+    if (flatRaw.some((s) => s.includes(":") || s.includes(","))) {
+      return flatRaw.join("\n");
+    }
+    return flatRaw.join(", ");
+  }
+  return "";
+}
+
+export function migrateResume(data) {
+  if (!data || typeof data !== "object") return structuredClone(defaultResume);
+  const next = { ...data };
+  next.skills = normalizeSkillsToText(data.skills);
+  if (!next.settings) next.settings = { ...defaultResume.settings };
   return next;
 }

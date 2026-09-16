@@ -3,7 +3,7 @@ import { Analytics } from "@vercel/analytics/react";
 import Editor from "./components/Editor";
 import Preview from "./components/Preview";
 import ImportReviewModal from "./components/ImportReviewModal";
-import { computeATS, defaultResume, loadResume, saveResume } from "./lib/resume";
+import { computeATS, defaultResume, loadResume, migrateResume, saveResume } from "./lib/resume";
 
 const TEMPLATES = [
   { id: "modern", name: "Modern" },
@@ -55,7 +55,7 @@ export default function App() {
     reader.onload = () => {
       try {
         const parsed = JSON.parse(reader.result);
-        setResume({ ...structuredClone(defaultResume), ...parsed });
+        setResume(migrateResume({ ...structuredClone(defaultResume), ...parsed }));
       } catch {
         alert("Invalid JSON file");
       }
@@ -65,7 +65,7 @@ export default function App() {
   };
 
   const applyParsedResume = (parsed) => {
-    setResume((r) => ({ ...structuredClone(defaultResume), ...parsed, settings: r.settings }));
+    setResume((r) => (migrateResume({ ...structuredClone(defaultResume), ...parsed, settings: r.settings })));
   };
 
   const pdfErrorMessage = (err) => {

@@ -1,3 +1,5 @@
+import { getFlatSkills, getSkillLines } from "../lib/resume";
+
 function Bullets({ text }) {
   const items = (text || "").split("\n").map((s) => s.trim()).filter(Boolean);
   if (!items.length) return null;
@@ -24,9 +26,29 @@ function ContactLine({ p }) {
   );
 }
 
+// Section-wise skill line: "Label: a, b, c" -> bold label + items.
+// `separator` is " • " for Classic, ", " for Minimal.
+function SkillLine({ line, separator = " • " }) {
+  const idx = line.indexOf(":");
+  if (idx === -1) {
+    const items = line.split(",").map((s) => s.trim()).filter(Boolean);
+    return <div>{items.join(separator) || line}</div>;
+  }
+  const label = line.slice(0, idx + 1).trim();
+  const rest = line.slice(idx + 1).trim();
+  const items = rest.split(",").map((s) => s.trim()).filter(Boolean);
+  return (
+    <div>
+      <span className="font-semibold text-slate-900">{label} </span>
+      {items.join(separator)}
+    </div>
+  );
+}
+
 function Modern({ r }) {
   const p = r.personal;
   const accent = r.settings.accent;
+  const flatSkills = getFlatSkills(r.skills);
   return (
     <div className="resume-paper">
       <div className="rounded-t-lg p-7 text-white" style={{ background: accent }}>
@@ -43,7 +65,7 @@ function Modern({ r }) {
         {p.summary && (
           <section>
             <h2 className="mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Summary</h2>
-            <p className="text-[13px] leading-relaxed text-slate-700">{p.summary}</p>
+            <p className="text-[13px] leading-relaxed whitespace-pre-line text-slate-700">{p.summary}</p>
           </section>
         )}
         {r.experience.length > 0 && (
@@ -70,7 +92,7 @@ function Modern({ r }) {
               <div key={pr.id} className="mb-2">
                 <div className="text-[13.5px] font-bold text-slate-900">{pr.name} {pr.tech && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{pr.tech}</span>}</div>
                 {pr.link && <div className="text-[11.5px] text-slate-500">{pr.link}</div>}
-                {pr.description && <p className="text-[13px] text-slate-700">{pr.description}</p>}
+                {pr.description && <p className="text-[13px] whitespace-pre-line text-slate-700">{pr.description}</p>}
               </div>
             ))}
           </section>
@@ -84,17 +106,17 @@ function Modern({ r }) {
                   <div className="text-[13px] font-bold text-slate-900">{e.degree}</div>
                   <div className="text-[12.5px] text-slate-600">{e.school}</div>
                   <div className="text-[11.5px] text-slate-500">{e.start} – {e.end}</div>
-                  {e.details && <p className="text-[12.5px] text-slate-600">{e.details}</p>}
+                  {e.details && <p className="text-[12.5px] whitespace-pre-line text-slate-600">{e.details}</p>}
                 </div>
               ))}
             </section>
           )}
           <section>
-            {r.skills.length > 0 && (
+            {flatSkills.length > 0 && (
               <>
                 <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Skills</h2>
                 <div className="flex flex-wrap gap-1.5">
-                  {r.skills.map((s) => (
+                  {flatSkills.map((s) => (
                     <span key={s} className="rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-white" style={{ background: accent }}>{s}</span>
                   ))}
                 </div>
@@ -134,7 +156,7 @@ function Classic({ r }) {
         {p.summary && (
           <section>
             <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Professional Summary</h2>
-            <p className="mt-1 text-[13px] leading-relaxed text-slate-700">{p.summary}</p>
+            <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line text-slate-700">{p.summary}</p>
           </section>
         )}
         {r.experience.length > 0 && (
@@ -153,21 +175,25 @@ function Classic({ r }) {
           <section>
             <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Education</h2>
             {r.education.map((e) => (
-              <div key={e.id} className="mt-1 text-[13px]"><span className="font-bold text-slate-900">{e.degree}</span><span className="text-slate-600"> — {e.school} ({e.start}–{e.end})</span>{e.details && <div className="text-slate-600">{e.details}</div>}</div>
+              <div key={e.id} className="mt-1 text-[13px]"><span className="font-bold text-slate-900">{e.degree}</span><span className="text-slate-600"> — {e.school} ({e.start}–{e.end})</span>{e.details && <div className="whitespace-pre-line text-slate-600">{e.details}</div>}</div>
             ))}
           </section>
         )}
-        {r.skills.length > 0 && (
+        {getSkillLines(r.skills).length > 0 && (
           <section>
             <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Skills</h2>
-            <p className="mt-1 text-[13px] text-slate-700">{r.skills.join(" • ")}</p>
+            <div className="mt-1 space-y-0.5 text-[13px] text-slate-700">
+              {getSkillLines(r.skills).map((line, i) => (
+                <SkillLine key={i} line={line} separator=" • " />
+              ))}
+            </div>
           </section>
         )}
         {r.projects.length > 0 && (
           <section>
             <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Projects</h2>
             {r.projects.map((pr) => (
-              <div key={pr.id} className="mt-1 text-[13px]"><span className="font-bold">{pr.name}</span>{pr.tech && <span className="text-slate-500"> ({pr.tech})</span>}{pr.link && <div className="text-slate-500">{pr.link}</div>}{pr.description && <div className="text-slate-700">{pr.description}</div>}</div>
+              <div key={pr.id} className="mt-1 text-[13px]"><span className="font-bold">{pr.name}</span>{pr.tech && <span className="text-slate-500"> ({pr.tech})</span>}{pr.link && <div className="text-slate-500">{pr.link}</div>}{pr.description && <div className="whitespace-pre-line text-slate-700">{pr.description}</div>}</div>
             ))}
           </section>
         )}
@@ -198,7 +224,7 @@ function Minimal({ r }) {
       <h1 className="text-3xl font-light tracking-tight text-slate-900">{p.fullName || "Your Name"}</h1>
       {p.title && <p className="mt-0.5 text-sm font-medium" style={{ color: accent }}>{p.title}</p>}
       <div className="mt-2"><ContactLine p={p} /></div>
-      {p.summary && <p className="mt-4 border-l-2 pl-3 text-[13px] leading-relaxed text-slate-600 italic" style={{ borderColor: accent }}>{p.summary}</p>}
+      {p.summary && <p className="mt-4 border-l-2 pl-3 text-[13px] leading-relaxed whitespace-pre-line text-slate-600 italic" style={{ borderColor: accent }}>{p.summary}</p>}
       <div className="mt-5 space-y-4">
         {r.experience.length > 0 && (
           <section>
@@ -213,17 +239,21 @@ function Minimal({ r }) {
           </section>
         )}
         <div className="grid grid-cols-1 gap-4">
-          {r.skills.length > 0 && (
+          {getSkillLines(r.skills).length > 0 && (
             <section>
               <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Skills</h2>
-              <p className="mt-1 text-[13px] text-slate-700">{r.skills.join(",  ")}</p>
+              <div className="mt-1 space-y-0.5 text-[13px] text-slate-700">
+                {getSkillLines(r.skills).map((line, i) => (
+                  <SkillLine key={i} line={line} separator=", " />
+                ))}
+              </div>
             </section>
           )}
           {r.education.length > 0 && (
             <section>
               <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Education</h2>
               {r.education.map((e) => (
-                <div key={e.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{e.school}</span> — {e.degree} ({e.start}–{e.end})</div>
+                <div key={e.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{e.school}</span> — {e.degree} ({e.start}–{e.end}){e.details && <div className="whitespace-pre-line text-slate-600">{e.details}</div>}</div>
               ))}
             </section>
           )}
@@ -231,7 +261,7 @@ function Minimal({ r }) {
             <section>
               <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Projects</h2>
               {r.projects.map((pr) => (
-                <div key={pr.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{pr.name}</span>{pr.tech && ` · ${pr.tech}`}{pr.description && <div>{pr.description}</div>}</div>
+                <div key={pr.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{pr.name}</span>{pr.tech && ` · ${pr.tech}`}{pr.description && <div className="whitespace-pre-line">{pr.description}</div>}</div>
               ))}
             </section>
           )}

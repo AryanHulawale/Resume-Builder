@@ -1,4 +1,4 @@
-import { moveItem, uid } from "../lib/resume";
+import { getSkillLines, moveItem, normalizeSkillsToText, uid } from "../lib/resume";
 
 function Field({ label, ...props }) {
   return (
@@ -149,22 +149,40 @@ export default function Editor({ resume, setResume }) {
               <Field label="Start" value={e.start} onChange={(ev) => updateList("education", e.id, { start: ev.target.value })} />
               <Field label="End" value={e.end} onChange={(ev) => updateList("education", e.id, { end: ev.target.value })} />
             </div>
-            <Area label="Details" rows={2} value={e.details} onChange={(ev) => updateList("education", e.id, { details: ev.target.value })} />
+            <Area label="Details (Enter = new line)" rows={3} value={e.details} onChange={(ev) => updateList("education", e.id, { details: ev.target.value })} placeholder={"GPA: 9.75 (96.14%) | Rank #2\nFocused on Full Stack Development (MERN)"} />
           </div>
         ))}
       </Section>
 
-      <Section title="Skills (comma separated)">
+      <Section title="Skills (one category per line)">
         <Area
-          label="Skills"
-          value={(resume.skills || []).join(", ")}
-          onChange={(e) => patch({ skills: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-          placeholder="React, JavaScript, Tailwind..."
+          label="Skills — Enter = new section, comma = separator"
+          rows={4}
+          value={Array.isArray(resume.skills) ? normalizeSkillsToText(resume.skills) : (resume.skills || "")}
+          onChange={(e) => patch({ skills: e.target.value })}
+          placeholder={"Frontend Technologies: React, HTML5, CSS3, Tailwind CSS\nBackend Frameworks: Node.js, Express, Mongoose\nDatabase: MongoDB, PostgreSQL"}
         />
-        <div className="flex flex-wrap gap-1.5">
-          {(resume.skills || []).map((s) => (
-            <span key={s} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{s}</span>
-          ))}
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          Tip: press <b>Enter</b> for a new category line (Classic/Minimal show each line separately).
+          Separate skills inside a line with commas. Modern template shows them as comma-separated pills.
+        </p>
+        <div className="space-y-1.5">
+          {getSkillLines(resume.skills).map((line, i) => {
+            const colonIdx = line.indexOf(":");
+            const label = colonIdx !== -1 ? line.slice(0, colonIdx + 1).trim() : null;
+            const rest = colonIdx !== -1 ? line.slice(colonIdx + 1).trim() : line;
+            const chips = rest.split(",").map((s) => s.trim()).filter(Boolean);
+            return (
+              <div key={`${line}-${i}`} className="text-xs">
+                {label && <div className="mb-1 font-bold text-slate-700">{label}</div>}
+                <div className="flex flex-wrap gap-1.5">
+                  {(chips.length ? chips : [line]).map((s) => (
+                    <span key={s} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{s}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Section>
 
@@ -188,7 +206,7 @@ export default function Editor({ resume, setResume }) {
               <Field label="Link" value={e.link} onChange={(ev) => updateList("projects", e.id, { link: ev.target.value })} />
               <Field label="Tech stack" value={e.tech} onChange={(ev) => updateList("projects", e.id, { tech: ev.target.value })} />
             </div>
-            <Area label="Description" rows={2} value={e.description} onChange={(ev) => updateList("projects", e.id, { description: ev.target.value })} />
+            <Area label="Description (Enter = new line)" rows={3} value={e.description} onChange={(ev) => updateList("projects", e.id, { description: ev.target.value })} placeholder={"Built X, improving Y by 30%\nReal-time messaging with ..."} />
           </div>
         ))}
       </Section>

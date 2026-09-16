@@ -1,3 +1,5 @@
+import { getFlatSkills, getSkillLines, normalizeSkillsToText } from "../lib/resume";
+
 function MiniField({ label, value, onChange, placeholder }) {
   return (
     <label className="block">
@@ -51,7 +53,7 @@ export default function ImportReviewModal({ data, setData, step, setStep, onClos
     personal: 1,
     experience: (data.experience || []).length,
     education: (data.education || []).length,
-    skills: (data.skills || []).length,
+    skills: getFlatSkills(data.skills).length,
     projects: (data.projects || []).length,
     certs: (data.certifications || []).length,
   };
@@ -137,6 +139,7 @@ export default function ImportReviewModal({ data, setData, step, setStep, onClos
                     <MiniField label="Start" value={e.start} onChange={(v) => patchList("education", e.id, { start: v })} />
                     <MiniField label="End" value={e.end} onChange={(v) => patchList("education", e.id, { end: v })} />
                   </div>
+                  <MiniArea label="Details (Enter = new line)" rows={3} value={e.details} onChange={(v) => patchList("education", e.id, { details: v })} placeholder={"GPA: 9.75\nFocused on ..."} />
                 </div>
               ))}
             </div>
@@ -145,14 +148,20 @@ export default function ImportReviewModal({ data, setData, step, setStep, onClos
           {current === "skills" && (
             <div className="space-y-3">
               <MiniArea
-                label="Skills (comma separated)"
-                rows={4}
-                value={(data.skills || []).join(", ")}
-                onChange={(v) => setData((d) => ({ ...d, skills: v.split(",").map((s) => s.trim()).filter(Boolean) }))}
-                placeholder="React, JavaScript, Tailwind..."
+                label="Skills — Enter = new section, comma = separator"
+                rows={5}
+                value={normalizeSkillsToText(data.skills)}
+                onChange={(v) => setData((d) => ({ ...d, skills: v }))}
+                placeholder={"Frontend Technologies: React, HTML5, CSS3\nBackend: Node.js, Express"}
               />
+              <p className="text-[11px] text-slate-400">Each line = one category (Classic/Minimal). Commas separate skills inside a line. Modern shows flat comma-separated pills.</p>
+              <div className="space-y-1.5">
+                {getSkillLines(data.skills).map((line, i) => (
+                  <div key={`${line}-${i}`} className="text-xs text-slate-600"><span className="font-bold">{line.split(":")[0]}{line.includes(":") ? ":" : ""}</span> {(line.includes(":") ? line.slice(line.indexOf(":") + 1) : line).trim()}</div>
+                ))}
+              </div>
               <div className="flex flex-wrap gap-1.5">
-                {(data.skills || []).map((s, i) => (
+                {getFlatSkills(data.skills).map((s, i) => (
                   <span key={`${s}-${i}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{s}</span>
                 ))}
               </div>

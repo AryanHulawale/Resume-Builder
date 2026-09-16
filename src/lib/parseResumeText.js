@@ -295,7 +295,8 @@ function parseEducation(lines) {
     const years = text.match(/(19|20)\d{2}/g) || [];
     const degree = stripBullet(block[0] || "").slice(0, 140);
     const school = stripBullet(block[1] || block[0]?.split(/[,—–-]/).slice(-1)[0] || "").slice(0, 140);
-    const details = block.slice(2).join(" ").slice(0, 300);
+    // Preserve Enter-separated lines so preview shows each on a new line.
+    const details = block.slice(2).map((l) => stripBullet(l)).filter(Boolean).join("\n").slice(0, 500);
     return {
       id: uid(),
       degree,
@@ -308,21 +309,17 @@ function parseEducation(lines) {
 }
 
 function parseSkills(lines) {
-  const text = cleanLines(lines).join("\n");
-  if (!text) return [];
-  const parts = text.split(/[,•·▪|/\n;·]+/).map((s) => s.replace(/^[•*–—\s-]+/, "").trim()).filter(Boolean);
-  const seen = new Set();
-  const out = [];
-  for (const p of parts) {
-    if (p.length < 1 || p.length > 40) continue;
-    if (/^(and|with|using)$/i.test(p)) continue;
-    const key = p.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(p);
-    if (out.length >= 30) break;
-  }
-  return out;
+  // Return multiline section-wise text: one category per line.
+  // Each input line is kept as its own section; commas separate skills inside a line.
+  // Example: "Frontend Technologies: React, HTML5" stays on one line.
+  const clean = cleanLines(lines);
+  if (!clean.length) return "";
+  const outLines = clean
+    .map((l) => stripBullet(l).replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .map((l) => l.slice(0, 220))
+    .slice(0, 12);
+  return outLines.join("\n");
 }
 
 function parseProjects(lines) {
@@ -357,7 +354,8 @@ function parseProjects(lines) {
     const parenM = title.match(/\(([^)]{2,60})\)/);
     const tech = (techM?.[1] || parenM?.[1] || "").trim().slice(0, 120);
     const name = title.replace(/\([^)]*\)/, "").trim();
-    const description = block.slice(1).join(" ").replace(URL_RE, "").trim().slice(0, 500);
+    // Preserve line breaks so Enter in editor maps to new lines in preview.
+    const description = block.slice(1).map((l) => stripBullet(l)).filter(Boolean).join("\n").replace(URL_RE, "").trim().slice(0, 800);
     return { id: uid(), name, link, tech, description };
   }).filter((p) => p.name || p.description);
 }
@@ -435,10 +433,13 @@ export function hasUsefulData(parsed) {
   if (!parsed) return false;
   const p = parsed.personal || {};
   if (p.fullName || p.email || p.phone || p.summary) return true;
+  const skillsCount = typeof parsed.skills === "string"
+    ? parsed.skills.split("\n").map((s) => s.trim()).filter(Boolean).length
+    : (parsed.skills || []).length;
   return Boolean(
     (parsed.experience || []).length ||
     (parsed.education || []).length ||
-    (parsed.skills || []).length ||
+    skillsCount ||
     (parsed.projects || []).length ||
     (parsed.certifications || []).length ||
     (parsed.customSections || []).length
@@ -451,7 +452,10 @@ export function summarizeParsed(parsed) {
   if (parsed.personal?.email) bits.push("email");
   if (parsed.personal?.phone) bits.push("phone");
   if ((parsed.experience || []).length) bits.push(`${parsed.experience.length} job(s)`);
-  if ((parsed.skills || []).length) bits.push(`${parsed.skills.length} skill(s)`);
+  const nSkills = typeof parsed.skills === "string"
+    ? parsed.skills.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean).length
+    : (parsed.skills || []).length;
+  if (nSkills) bits.push(`${nSkills} skill(s)`);
   if ((parsed.education || []).length) bits.push(`${parsed.education.length} education`);
   if ((parsed.projects || []).length) bits.push(`${parsed.projects.length} project(s)`);
   if ((parsed.certifications || []).length) bits.push(`${parsed.certifications.length} certification(s)`);
