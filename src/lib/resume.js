@@ -4,6 +4,28 @@ export const uid = () =>
   Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 
 export const STORAGE_KEY = "resume-builder-v1";
+
+// Orderable resume sections (header with name/contact always stays on top).
+export const SECTION_KEYS = ["summary", "experience", "education", "skills", "projects", "certifications", "custom"];
+export const SECTION_LABELS = {
+  summary: "Summary",
+  experience: "Experience",
+  education: "Education",
+  skills: "Skills",
+  projects: "Projects",
+  certifications: "Certifications",
+  custom: "Custom sections",
+};
+export const DEFAULT_SECTION_ORDER = [...SECTION_KEYS];
+
+export function getSectionOrder(resume) {
+  const raw = resume?.settings?.sectionOrder;
+  const base = Array.isArray(raw) && raw.length ? raw : DEFAULT_SECTION_ORDER;
+  const clean = base.filter((k) => SECTION_KEYS.includes(k));
+  for (const k of SECTION_KEYS) if (!clean.includes(k)) clean.push(k);
+  return clean;
+}
+
 export const defaultResume = {
   personal: {
     fullName: "Aarav Sharma",
@@ -88,6 +110,7 @@ export const defaultResume = {
     template: "modern",
     accent: "#2563eb",
     fontSize: "medium",
+    sectionOrder: ["summary", "experience", "education", "skills", "projects", "certifications", "custom"],
   },
 };
 
@@ -272,7 +295,19 @@ export function migrateResume(data) {
   if (!data || typeof data !== "object") return structuredClone(defaultResume);
   const next = { ...data };
   next.skills = normalizeSkillsToText(data.skills);
-  if (!next.settings) next.settings = { ...defaultResume.settings };
+  if (!next.settings) next.settings = { ...structuredClone(defaultResume.settings) };
+  else {
+    if (!next.settings.fontSize) next.settings.fontSize = defaultResume.settings.fontSize;
+    if (!next.settings.accent) next.settings.accent = defaultResume.settings.accent;
+    if (!next.settings.template) next.settings.template = defaultResume.settings.template;
+    if (!Array.isArray(next.settings.sectionOrder) || !next.settings.sectionOrder.length) {
+      // Preserve each template's historic default order for existing saves.
+      const t = next.settings.template;
+      if (t === "modern") next.settings.sectionOrder = ["summary", "experience", "projects", "education", "skills", "certifications", "custom"];
+      else if (t === "minimal") next.settings.sectionOrder = ["summary", "experience", "skills", "education", "projects", "certifications", "custom"];
+      else next.settings.sectionOrder = [...DEFAULT_SECTION_ORDER];
+    }
+  }
   return next;
 }
 

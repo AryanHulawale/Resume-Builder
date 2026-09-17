@@ -1,4 +1,4 @@
-import { getFlatSkills, getSkillLines, parseBullets } from "../lib/resume";
+import { getFlatSkills, getSectionOrder, getSkillLines, parseBullets } from "../lib/resume";
 import { parseRich } from "../lib/richtext";
 
 // ---------- clickable links ----------
@@ -177,6 +177,85 @@ function Modern({ r }) {
   const p = r.personal;
   const accent = r.settings.accent;
   const flatSkills = getFlatSkills(r.skills);
+  const order = getSectionOrder(r);
+  const sections = {
+    summary: p.summary ? (
+      <section key="summary">
+        <h2 className="mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Summary</h2>
+        <p className="text-[13px] leading-relaxed whitespace-pre-line text-slate-700"><RichText text={p.summary} /></p>
+      </section>
+    ) : null,
+    experience: r.experience.length > 0 ? (
+      <section key="experience">
+        <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Experience</h2>
+        <div className="space-y-3">
+          {r.experience.map((e) => (
+            <div key={e.id}>
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="text-[14px] font-bold text-slate-900">{e.role || "Role"} {e.company && <span className="font-medium text-slate-500">@ {e.company}</span>}</div>
+                <div className="shrink-0 text-[11.5px] text-slate-500">{e.start} – {e.current ? "Present" : e.end}</div>
+              </div>
+              {e.location && <div className="text-[11.5px] text-slate-500">{e.location}</div>}
+              <Bullets text={e.bullets} />
+            </div>
+          ))}
+        </div>
+      </section>
+    ) : null,
+    projects: r.projects.length > 0 ? (
+      <section key="projects">
+        <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Projects</h2>
+        {r.projects.map((pr) => (
+          <div key={pr.id} className="mb-2">
+            <div className="text-[13.5px] font-bold text-slate-900">{pr.name} {pr.tech && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{pr.tech}</span>}</div>
+            {pr.link && <div className="text-[11.5px] text-slate-500"><ProjLink url={pr.link} /></div>}
+            {pr.description && <p className="text-[13px] whitespace-pre-line text-slate-700"><RichText text={pr.description} /></p>}
+          </div>
+        ))}
+      </section>
+    ) : null,
+    education: r.education.length > 0 ? (
+      <section key="education">
+        <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Education</h2>
+        {r.education.map((e) => (
+          <div key={e.id} className="mb-2">
+            <div className="text-[13px] font-bold text-slate-900">{e.degree}</div>
+            <div className="text-[12.5px] text-slate-600">{e.school}</div>
+            <div className="text-[11.5px] text-slate-500">{e.start} – {e.end}</div>
+            {e.details && <p className="text-[12.5px] whitespace-pre-line text-slate-600"><RichText text={e.details} /></p>}
+          </div>
+        ))}
+      </section>
+    ) : null,
+    skills: flatSkills.length > 0 ? (
+      <section key="skills">
+        <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Skills</h2>
+        <div className="flex flex-wrap gap-1.5">
+          {flatSkills.map((s) => (
+            <span key={s} className="rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-white" style={{ background: accent }}>{s}</span>
+          ))}
+        </div>
+      </section>
+    ) : null,
+    certifications: r.certifications.length > 0 ? (
+      <section key="certifications">
+        <h2 className="mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Certifications</h2>
+        {r.certifications.map((c) => (
+          <div key={c.id} className="text-[12.5px] text-slate-700">• {c.name} {c.issuer && <span className="text-slate-500">— {c.issuer}</span>} {c.year && <span className="text-slate-500">({c.year})</span>}</div>
+        ))}
+      </section>
+    ) : null,
+    custom: r.customSections.length > 0 ? (
+      <div key="custom" className="space-y-5">
+        {r.customSections.map((s) => (
+          <section key={s.id}>
+            <h2 className="mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>{s.title}</h2>
+            <p className="text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
+          </section>
+        ))}
+      </div>
+    ) : null,
+  };
   return (
     <div className="resume-paper">
       <div className="rounded-t-lg p-7 text-white" style={{ background: accent }}>
@@ -187,82 +266,7 @@ function Modern({ r }) {
         </div>
       </div>
       <div className="space-y-5 p-7">
-        {p.summary && (
-          <section>
-            <h2 className="mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Summary</h2>
-            <p className="text-[13px] leading-relaxed whitespace-pre-line text-slate-700"><RichText text={p.summary} /></p>
-          </section>
-        )}
-        {r.experience.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Experience</h2>
-            <div className="space-y-3">
-              {r.experience.map((e) => (
-                <div key={e.id}>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <div className="text-[14px] font-bold text-slate-900">{e.role || "Role"} {e.company && <span className="font-medium text-slate-500">@ {e.company}</span>}</div>
-                    <div className="shrink-0 text-[11.5px] text-slate-500">{e.start} – {e.current ? "Present" : e.end}</div>
-                  </div>
-                  {e.location && <div className="text-[11.5px] text-slate-500">{e.location}</div>}
-                  <Bullets text={e.bullets} />
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-        {r.projects.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Projects</h2>
-            {r.projects.map((pr) => (
-              <div key={pr.id} className="mb-2">
-                <div className="text-[13.5px] font-bold text-slate-900">{pr.name} {pr.tech && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{pr.tech}</span>}</div>
-                {pr.link && <div className="text-[11.5px] text-slate-500"><ProjLink url={pr.link} /></div>}
-                {pr.description && <p className="text-[13px] whitespace-pre-line text-slate-700"><RichText text={pr.description} /></p>}
-              </div>
-            ))}
-          </section>
-        )}
-        <div className="grid grid-cols-2 gap-5">
-          {r.education.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Education</h2>
-              {r.education.map((e) => (
-                <div key={e.id} className="mb-2">
-                  <div className="text-[13px] font-bold text-slate-900">{e.degree}</div>
-                  <div className="text-[12.5px] text-slate-600">{e.school}</div>
-                  <div className="text-[11.5px] text-slate-500">{e.start} – {e.end}</div>
-                  {e.details && <p className="text-[12.5px] whitespace-pre-line text-slate-600"><RichText text={e.details} /></p>}
-                </div>
-              ))}
-            </section>
-          )}
-          <section>
-            {flatSkills.length > 0 && (
-              <>
-                <h2 className="mb-2 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Skills</h2>
-                <div className="flex flex-wrap gap-1.5">
-                  {flatSkills.map((s) => (
-                    <span key={s} className="rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-white" style={{ background: accent }}>{s}</span>
-                  ))}
-                </div>
-              </>
-            )}
-            {r.certifications.length > 0 && (
-              <>
-                <h2 className="mt-3 mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>Certifications</h2>
-                {r.certifications.map((c) => (
-                  <div key={c.id} className="text-[12.5px] text-slate-700">• {c.name} {c.issuer && <span className="text-slate-500">— {c.issuer}</span>} {c.year && <span className="text-slate-500">({c.year})</span>}</div>
-                ))}
-              </>
-            )}
-          </section>
-        </div>
-        {r.customSections.map((s) => (
-          <section key={s.id}>
-            <h2 className="mb-1 text-xs font-extrabold tracking-widest uppercase" style={{ color: accent }}>{s.title}</h2>
-            <p className="text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
-          </section>
-        ))}
+        {order.map((k) => sections[k])}
       </div>
     </div>
   );
@@ -270,6 +274,71 @@ function Modern({ r }) {
 
 function Classic({ r }) {
   const p = r.personal;
+  const order = getSectionOrder(r);
+  const sections = {
+    summary: p.summary ? (
+      <section key="summary">
+        <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Professional Summary</h2>
+        <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line text-slate-700"><RichText text={p.summary} /></p>
+      </section>
+    ) : null,
+    experience: r.experience.length > 0 ? (
+      <section key="experience">
+        <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Work Experience</h2>
+        {r.experience.map((e) => (
+          <div key={e.id} className="mt-2">
+            <div className="flex justify-between text-[13.5px] font-bold text-slate-900"><span>{e.role}{e.company && `, ${e.company}`}</span><span className="font-medium text-slate-500">{e.start} – {e.current ? "Present" : e.end}</span></div>
+            {e.location && <div className="text-[12px] text-slate-500 italic">{e.location}</div>}
+            <Bullets text={e.bullets} />
+          </div>
+        ))}
+      </section>
+    ) : null,
+    education: r.education.length > 0 ? (
+      <section key="education">
+        <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Education</h2>
+        {r.education.map((e) => (
+          <div key={e.id} className="mt-1 text-[13px]"><span className="font-bold text-slate-900">{e.degree}</span><span className="text-slate-600"> — {e.school} ({e.start}–{e.end})</span>{e.details && <div className="whitespace-pre-line text-slate-600"><RichText text={e.details} /></div>}</div>
+        ))}
+      </section>
+    ) : null,
+    skills: getSkillLines(r.skills).length > 0 ? (
+      <section key="skills">
+        <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Skills</h2>
+        <div className="mt-1 space-y-0.5 text-[13px] text-slate-700">
+          {getSkillLines(r.skills).map((line, i) => (
+            <SkillLine key={i} line={line} separator=" • " />
+          ))}
+        </div>
+      </section>
+    ) : null,
+    projects: r.projects.length > 0 ? (
+      <section key="projects">
+        <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Projects</h2>
+        {r.projects.map((pr) => (
+          <div key={pr.id} className="mt-1 text-[13px]"><span className="font-bold">{pr.name}</span>{pr.tech && <span className="text-slate-500"> ({pr.tech})</span>}{pr.link && <div className="text-slate-500"><ProjLink url={pr.link} /></div>}{pr.description && <div className="whitespace-pre-line text-slate-700"><RichText text={pr.description} /></div>}</div>
+        ))}
+      </section>
+    ) : null,
+    certifications: r.certifications.length > 0 ? (
+      <section key="certifications">
+        <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Certifications</h2>
+        {r.certifications.map((c) => (
+          <div key={c.id} className="text-[13px] text-slate-700">• {c.name} — {c.issuer} ({c.year})</div>
+        ))}
+      </section>
+    ) : null,
+    custom: r.customSections.length > 0 ? (
+      <div key="custom" className="space-y-4">
+        {r.customSections.map((s) => (
+          <section key={s.id}>
+            <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">{s.title}</h2>
+            <p className="mt-1 text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
+          </section>
+        ))}
+      </div>
+    ) : null,
+  };
   return (
     <div className="resume-paper p-8">
       <div className="border-b-2 border-slate-900 pb-3 text-center">
@@ -278,64 +347,7 @@ function Classic({ r }) {
         <div className="mt-2"><ContactLine p={p} /></div>
       </div>
       <div className="mt-4 space-y-4">
-        {p.summary && (
-          <section>
-            <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Professional Summary</h2>
-            <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line text-slate-700"><RichText text={p.summary} /></p>
-          </section>
-        )}
-        {r.experience.length > 0 && (
-          <section>
-            <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Work Experience</h2>
-            {r.experience.map((e) => (
-              <div key={e.id} className="mt-2">
-                <div className="flex justify-between text-[13.5px] font-bold text-slate-900"><span>{e.role}{e.company && `, ${e.company}`}</span><span className="font-medium text-slate-500">{e.start} – {e.current ? "Present" : e.end}</span></div>
-                {e.location && <div className="text-[12px] text-slate-500 italic">{e.location}</div>}
-                <Bullets text={e.bullets} />
-              </div>
-            ))}
-          </section>
-        )}
-        {r.education.length > 0 && (
-          <section>
-            <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Education</h2>
-            {r.education.map((e) => (
-              <div key={e.id} className="mt-1 text-[13px]"><span className="font-bold text-slate-900">{e.degree}</span><span className="text-slate-600"> — {e.school} ({e.start}–{e.end})</span>{e.details && <div className="whitespace-pre-line text-slate-600"><RichText text={e.details} /></div>}</div>
-            ))}
-          </section>
-        )}
-        {getSkillLines(r.skills).length > 0 && (
-          <section>
-            <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Skills</h2>
-            <div className="mt-1 space-y-0.5 text-[13px] text-slate-700">
-              {getSkillLines(r.skills).map((line, i) => (
-                <SkillLine key={i} line={line} separator=" • " />
-              ))}
-            </div>
-          </section>
-        )}
-        {r.projects.length > 0 && (
-          <section>
-            <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Projects</h2>
-            {r.projects.map((pr) => (
-              <div key={pr.id} className="mt-1 text-[13px]"><span className="font-bold">{pr.name}</span>{pr.tech && <span className="text-slate-500"> ({pr.tech})</span>}{pr.link && <div className="text-slate-500"><ProjLink url={pr.link} /></div>}{pr.description && <div className="whitespace-pre-line text-slate-700"><RichText text={pr.description} /></div>}</div>
-            ))}
-          </section>
-        )}
-        {r.certifications.length > 0 && (
-          <section>
-            <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">Certifications</h2>
-            {r.certifications.map((c) => (
-              <div key={c.id} className="text-[13px] text-slate-700">• {c.name} — {c.issuer} ({c.year})</div>
-            ))}
-          </section>
-        )}
-        {r.customSections.map((s) => (
-          <section key={s.id}>
-            <h2 className="border-b border-slate-300 pb-1 text-[13px] font-bold tracking-widest text-slate-900 uppercase">{s.title}</h2>
-            <p className="mt-1 text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
-          </section>
-        ))}
+        {order.map((k) => sections[k])}
       </div>
     </div>
   );
@@ -344,67 +356,75 @@ function Classic({ r }) {
 function Minimal({ r }) {
   const p = r.personal;
   const accent = r.settings.accent;
+  const order = getSectionOrder(r);
+  const sections = {
+    summary: p.summary ? (
+      <p key="summary" className="border-l-2 pl-3 text-[13px] leading-relaxed whitespace-pre-line text-slate-600 italic" style={{ borderColor: accent }}><RichText text={p.summary} /></p>
+    ) : null,
+    experience: r.experience.length > 0 ? (
+      <section key="experience">
+        <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Experience</h2>
+        {r.experience.map((e) => (
+          <div key={e.id} className="mt-2">
+            <div className="text-[14px] font-semibold text-slate-900">{e.role} <span className="font-normal text-slate-500">· {e.company}</span></div>
+            <div className="text-[11.5px] text-slate-400">{e.start} – {e.current ? "Present" : e.end}{e.location && ` · ${e.location}`}</div>
+            <Bullets text={e.bullets} />
+          </div>
+        ))}
+      </section>
+    ) : null,
+    skills: getSkillLines(r.skills).length > 0 ? (
+      <section key="skills">
+        <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Skills</h2>
+        <div className="mt-1 space-y-0.5 text-[13px] text-slate-700">
+          {getSkillLines(r.skills).map((line, i) => (
+            <SkillLine key={i} line={line} separator=", " />
+          ))}
+        </div>
+      </section>
+    ) : null,
+    education: r.education.length > 0 ? (
+      <section key="education">
+        <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Education</h2>
+        {r.education.map((e) => (
+          <div key={e.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{e.school}</span> — {e.degree} ({e.start}–{e.end}){e.details && <div className="whitespace-pre-line text-slate-600"><RichText text={e.details} /></div>}</div>
+        ))}
+      </section>
+    ) : null,
+    projects: r.projects.length > 0 ? (
+      <section key="projects">
+        <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Projects</h2>
+        {r.projects.map((pr) => (
+          <div key={pr.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{pr.name}</span>{pr.tech && ` · ${pr.tech}`}{pr.link && <div className="break-words"><ProjLink url={pr.link} /></div>}{pr.description && <div className="whitespace-pre-line"><RichText text={pr.description} /></div>}</div>
+        ))}
+      </section>
+    ) : null,
+    certifications: r.certifications.length > 0 ? (
+      <section key="certifications">
+        <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Certifications</h2>
+        {r.certifications.map((c) => (
+          <div key={c.id} className="text-[13px] text-slate-700">{c.name} — {c.issuer} ({c.year})</div>
+        ))}
+      </section>
+    ) : null,
+    custom: r.customSections.length > 0 ? (
+      <div key="custom" className="space-y-4">
+        {r.customSections.map((s) => (
+          <section key={s.id}>
+            <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">{s.title}</h2>
+            <p className="mt-1 text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
+          </section>
+        ))}
+      </div>
+    ) : null,
+  };
   return (
     <div className="resume-paper p-8">
       <h1 className="text-3xl font-light tracking-tight text-slate-900">{p.fullName || "Your Name"}</h1>
       {p.title && <p className="mt-0.5 text-sm font-medium" style={{ color: accent }}>{p.title}</p>}
       <div className="mt-2"><ContactLine p={p} /></div>
-      {p.summary && <p className="mt-4 border-l-2 pl-3 text-[13px] leading-relaxed whitespace-pre-line text-slate-600 italic" style={{ borderColor: accent }}><RichText text={p.summary} /></p>}
       <div className="mt-5 space-y-4">
-        {r.experience.length > 0 && (
-          <section>
-            <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Experience</h2>
-            {r.experience.map((e) => (
-              <div key={e.id} className="mt-2">
-                <div className="text-[14px] font-semibold text-slate-900">{e.role} <span className="font-normal text-slate-500">· {e.company}</span></div>
-                <div className="text-[11.5px] text-slate-400">{e.start} – {e.current ? "Present" : e.end}{e.location && ` · ${e.location}`}</div>
-                <Bullets text={e.bullets} />
-              </div>
-            ))}
-          </section>
-        )}
-        <div className="grid grid-cols-1 gap-4">
-          {getSkillLines(r.skills).length > 0 && (
-            <section>
-              <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Skills</h2>
-              <div className="mt-1 space-y-0.5 text-[13px] text-slate-700">
-                {getSkillLines(r.skills).map((line, i) => (
-                  <SkillLine key={i} line={line} separator=", " />
-                ))}
-              </div>
-            </section>
-          )}
-          {r.education.length > 0 && (
-            <section>
-              <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Education</h2>
-              {r.education.map((e) => (
-                <div key={e.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{e.school}</span> — {e.degree} ({e.start}–{e.end}){e.details && <div className="whitespace-pre-line text-slate-600"><RichText text={e.details} /></div>}</div>
-              ))}
-            </section>
-          )}
-          {r.projects.length > 0 && (
-            <section>
-              <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Projects</h2>
-              {r.projects.map((pr) => (
-                <div key={pr.id} className="mt-1 text-[13px] text-slate-700"><span className="font-semibold text-slate-900">{pr.name}</span>{pr.tech && ` · ${pr.tech}`}{pr.link && <div className="break-words"><ProjLink url={pr.link} /></div>}{pr.description && <div className="whitespace-pre-line"><RichText text={pr.description} /></div>}</div>
-              ))}
-            </section>
-          )}
-          {r.certifications.length > 0 && (
-            <section>
-              <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Certifications</h2>
-              {r.certifications.map((c) => (
-                <div key={c.id} className="text-[13px] text-slate-700">{c.name} — {c.issuer} ({c.year})</div>
-              ))}
-            </section>
-          )}
-          {r.customSections.map((s) => (
-            <section key={s.id}>
-              <h2 className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">{s.title}</h2>
-              <p className="mt-1 text-[13px] whitespace-pre-wrap text-slate-700"><RichText text={s.content} /></p>
-            </section>
-          ))}
-        </div>
+        {order.map((k) => sections[k])}
       </div>
     </div>
   );

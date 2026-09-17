@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { getSkillLines, moveItem, normalizeSkillsToText, smartJoinBullets, uid } from "../lib/resume";
+import { SECTION_LABELS, getSectionOrder, moveItem, normalizeSkillsToText, smartJoinBullets, uid } from "../lib/resume";
 import { clearMarks, toggleMark, upperSelection } from "../lib/richtext";
 
 function Field({ label, ...props }) {
@@ -321,6 +321,12 @@ export default function Editor({ resume, setResume }) {
     setResume((r) => ({ ...r, [key]: moveItem(r[key], idx, dir) }));
 
   const p = resume.personal;
+  const sectionOrder = getSectionOrder(resume);
+  const moveSection = (idx, dir) =>
+    setResume((r) => ({
+      ...r,
+      settings: { ...r.settings, sectionOrder: moveItem(getSectionOrder(r), idx, dir) },
+    }));
 
   return (
     <div className="space-y-4">
@@ -336,6 +342,20 @@ export default function Editor({ resume, setResume }) {
           <Field label="Website / Portfolio" value={p.website} onChange={(e) => patchPersonal("website", e.target.value)} placeholder="your-site.dev" />
         </div>
         <RichArea label="Professional summary" rows={4} value={p.summary} onChange={(v) => patchPersonal("summary", v)} placeholder="2–4 lines: years, stack, measurable wins... Select text + Ctrl+B for bold." />
+      </Section>
+
+      <Section title="Resume sections order (↑ ↓ moves whole section)">
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          Move the entire Skills block above / below Experience, Education, Projects, etc. Applies to all templates.
+        </p>
+        <div className="space-y-1.5">
+          {sectionOrder.map((key, i) => (
+            <div key={key} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-1.5">
+              <span className="text-xs font-bold text-slate-700">#{i + 1} · {SECTION_LABELS[key] || key}</span>
+              <MoveButtons onUp={() => moveSection(i, -1)} onDown={() => moveSection(i, 1)} />
+            </div>
+          ))}
+        </div>
       </Section>
 
       <Section
@@ -408,36 +428,14 @@ export default function Editor({ resume, setResume }) {
         ))}
       </Section>
 
-      <Section title="Skills (one category per line)">
+      <Section title={resume.settings?.template === "modern" ? "Skills" : "Skills (one category per line)"}>
         <Area
-          label="Skills — Enter = new section, comma = separator"
+          label={resume.settings?.template === "modern" ? "Skills — comma = separator" : "Skills — Enter = new section, comma = separator"}
           rows={4}
           value={Array.isArray(resume.skills) ? normalizeSkillsToText(resume.skills) : (resume.skills || "")}
           onChange={(e) => patch({ skills: e.target.value })}
-          placeholder={"Frontend Technologies: React, HTML5, CSS3, Tailwind CSS\nBackend Frameworks: Node.js, Express, Mongoose\nDatabase: MongoDB, PostgreSQL"}
+          placeholder={resume.settings?.template === "modern" ? "React, JavaScript, TypeScript, Node.js, Git, REST APIs" : "Frontend Technologies: React, HTML5, CSS3, Tailwind CSS\nBackend Frameworks: Node.js, Express, Mongoose\nDatabase: MongoDB, PostgreSQL"}
         />
-        <p className="text-[11px] leading-relaxed text-slate-400">
-          Tip: press <b>Enter</b> for a new category line (Classic/Minimal show each line separately).
-          Separate skills inside a line with commas. Modern template shows them as comma-separated pills.
-        </p>
-        <div className="space-y-1.5">
-          {getSkillLines(resume.skills).map((line, i) => {
-            const colonIdx = line.indexOf(":");
-            const label = colonIdx !== -1 ? line.slice(0, colonIdx + 1).trim() : null;
-            const rest = colonIdx !== -1 ? line.slice(colonIdx + 1).trim() : line;
-            const chips = rest.split(",").map((s) => s.trim()).filter(Boolean);
-            return (
-              <div key={`${line}-${i}`} className="text-xs">
-                {label && <div className="mb-1 font-bold text-slate-700">{label}</div>}
-                <div className="flex flex-wrap gap-1.5">
-                  {(chips.length ? chips : [line]).map((s) => (
-                    <span key={s} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{s}</span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </Section>
 
       <Section
@@ -475,7 +473,10 @@ export default function Editor({ resume, setResume }) {
           <div key={e.id} className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500">#{i + 1}</span>
-              <button className={btnDanger} onClick={() => removeFrom("certifications", e.id)}>Remove</button>
+              <div className="flex items-center gap-2">
+                <MoveButtons onUp={() => moveIn("certifications", i, -1)} onDown={() => moveIn("certifications", i, 1)} />
+                <button className={btnDanger} onClick={() => removeFrom("certifications", e.id)}>Remove</button>
+              </div>
             </div>
             <Field label="Name" value={e.name} onChange={(ev) => updateList("certifications", e.id, { name: ev.target.value })} />
             <div className="grid grid-cols-2 gap-2">
