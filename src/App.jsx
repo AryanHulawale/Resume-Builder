@@ -25,6 +25,9 @@ export default function App() {
   const [reviewData, setReviewData] = useState(null);
   const [reviewStep, setReviewStep] = useState(0);
   const [reviewSource, setReviewSource] = useState("");
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const fileRef = useRef(null);
   const pdfRef = useRef(null);
 
@@ -32,6 +35,14 @@ export default function App() {
     saveResume(resume);
     setSavedAt(new Date().toLocaleTimeString());
   }, [resume]);
+
+  // Keep browser tab / print header title as just "Rumevo" so the
+  // Chrome print header never shows a long title. URL + date footer
+  // can only be removed by unchecking "Headers and footers" in the
+  // print dialog (browsers don't let pages disable it via code).
+  useEffect(() => {
+    document.title = "Rumevo";
+  }, []);
 
   const ats = useMemo(() => computeATS(resume), [resume]);
 
@@ -46,6 +57,46 @@ export default function App() {
     a.download = `${(resume.personal.fullName || "resume").replace(/\s+/g, "-").toLowerCase()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Clean PDF download — no browser URL / date / title added.
+  // Opens a preview first so user can check, then download.
+  const handlePrintPdfClick = async () => {
+    setExportingPdf(true);
+    try {
+      const { getResumePdfPreviewUrl } = await import("./lib/exportPdf");
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      const url = await getResumePdfPreviewUrl();
+      setPdfPreviewUrl(url);
+      setPdfPreviewOpen(true);
+    } catch (err) {
+      console.error(err);
+      alert("Could not generate PDF preview.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const { exportResumePdf } = await import("./lib/exportPdf");
+      const name = (resume.personal.fullName || "resume").replace(/\s+/g, "-").toLowerCase();
+      await exportResumePdf(`${name}.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert("Could not generate PDF. Try Print → Save as PDF with Headers and footers unchecked.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const closePdfPreview = () => {
+    setPdfPreviewOpen(false);
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(null);
+    }
   };
 
   const handleImport = (e) => {
@@ -192,7 +243,7 @@ export default function App() {
           </div>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button onClick={() => window.print()} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-700">⬇ Print / PDF</button>
+            <button onClick={handlePrintPdfClick} disabled={exportingPdf} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-60">{exportingPdf ? "Generating…" : "⬇ Print / PDF"}</button>
             <button onClick={handleExport} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Export JSON</button>
             <button onClick={() => fileRef.current?.click()} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Import</button>
             <button
@@ -274,7 +325,7 @@ export default function App() {
         <div className="print-full">
           <div className="no-print mb-3 flex items-center justify-between text-xs text-slate-500">
             <span>Live preview · {resume.settings.template} template</span>
-            <span>Tip: Print → Save as PDF · margins: Default</span>
+            <span>Tip: Download PDF = clean (no link/date) · Print → uncheck Headers and footers</span>
           </div>
           <div className="print-full mx-auto max-w-[820px]">
             <Preview resume={resume} />
@@ -328,6 +379,39 @@ export default function App() {
           onClose={() => { setReviewOpen(false); setReviewData(null); setReviewStep(0); }}
           onSubmit={handleReviewSubmit}
         />
+      )}
+
+      {/* PDF preview — clean export, no URL / date / title */}
+      {pdfPreviewOpen && (
+        <div className="no-print fixed inset-0 z-30 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+              <div>
+                <h3 className="text-sm font-extrabold">PDF Preview</h3>
+                <p className="text-[11px] text-slate-500">Clean export — no link, time or title added</p>
+              </div>
+              <button onClick={closePdfPreview} className="rounded-lg px-2 py-1 text-lg font-bold text-slate-500 hover:bg-slate-100">✕</button>
+            </div>
+            <div className="min-h-0 flex-1 bg-slate-100 p-4">
+              {pdfPreviewUrl ? (
+                <iframe src={pdfPreviewUrl} title="PDF preview" className="h-[60vh] w-full rounded-lg border border-slate-200 bg-white" />
+              ) : (
+                <p className="py-10 text-center text-xs text-slate-500">Generating preview…</p>
+              )}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <button onClick={() => window.print()} className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                Browser Print
+              </button>
+              <button onClick={closePdfPreview} className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                Close
+              </button>
+              <button onClick={handleDownloadPdf} disabled={exportingPdf} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-60">
+                {exportingPdf ? "Generating…" : "⬇ Download PDF"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
